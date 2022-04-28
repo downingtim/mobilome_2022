@@ -1,0 +1,241 @@
+---
+title: "Make Figure 1 in paper of genes vs PPIs"
+---
+
+```{r setup, include=FALSE}
+# You need "Plasmid_PPI.csv" in your local folder. Get it from Figshare doi:
+# https://doi.org/10.6084/m9.figshare.19674054
+
+# install.packages("genbankr", ask=F) # v1.0.0
+library(genbankr)
+# install.packages("igraph", ask=F) # v1.0.0
+library(igraph)
+# BiocManager::install(c("STRINGdb"), ask=F) # , version="3.8") #  
+# see https://bioconductor.org/packages/devel/bioc/vignettes/STRINGdb/inst/doc/STRINGdb.pdf
+#STRINGdb$methods()              # To list all the methods available.
+#STRINGdb$help("get_graph")      # To visualize their documentation.
+library(STRINGdb)     # activate the STRINGdb library # eg species_id=9606 is Homo sapiens 
+#install.packages("VennDiagram", ask=F)
+library(VennDiagram)
+#install.packages("rentrez", ask=F)
+library(rentrez)
+#install.packages("tidyverse", ask=F)
+library(tidyverse)
+# install.packages("dplyr", ask=F)
+library(dplyr)
+# install.packages("stringr", ask=F)
+library(stringr)
+#BiocManager::install("GenomicRanges", ask=F)
+library(GenomicRanges)
+#install.packages("readr", ask=F)
+library(readr)
+# install.packages("curl", ask=F)
+library(curl)
+# install.packages("httr", ask=F)
+library(httr)
+library(readr)
+options(warn=-1)
+# READ IN K AS USER INPUT
+library(ggrepel)
+# install.packages("cluster", ask=F)
+library(cluster)
+# install.packages("factoextra", ask=F)
+library(factoextra) 
+library(tidyverse)  # data manipulation
+# install.packages("ggExtra", ask=F)
+library(ggExtra)
+# install.packages("ggpubr", ask=F)
+library(ggpubr)
+
+############## Now real code ##################
+# Sample Plasmid_PPI Chrom_PPI Fraction
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/RMD_FILES")
+# use *_chrom_data.csv  from OUTPUT6/
+dat1 <- data.frame(read.csv("Plasmid_PPI.csv", header=T, sep="\t"))
+dat1$Sample <- gsub("OUTPUT5_chroms_all_4422/",  replacement="", dat1$Sample)
+str(dat1) #4377 obs. of  4 variables:
+dat_old <- dat1 # had 4419 samples
+dat1 <- subset(dat_old, Fraction > 0.0000000001) # exclude non-zero
+str(dat1)   # 3,146 samples
+
+cor.test(dat1$Plasmid_PPI, dat1$Chrom_PPI) # association of plasmid & chrom PPIs
+                                      # r=0.4456,  raw p< 2.2e-16
+cor.test(dat1$Fraction, dat1$Chrom_PPI) # association of plasmid PPIs & fraction plasmid
+                                   # r=-0.832,   raw p< 2.2e-16
+cor.test(dat1$Plasmid_PPI, dat1$Fraction) # association of chrom PPIs & fraction chrom
+                                     # r=-0.102,   raw p< 9.8e-09
+
+summary(dat1$Plasmid_PPI)
+#    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#   5981   28484   40368   47358   58903  373497 
+sd(dat1$Plasmid_PPI)
+summary(dat1$Chrom_PPI)
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#      1    1426    3244    5331    6716   60555 
+sd(dat1$Chrom_PPI)
+summary(dat1$Fraction)
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ # 0.2990  0.8790  0.9300  0.9101  0.9610  1.0000
+sd(dat1$Fraction)
+
+pdf("Chrom_plasmid_PPI_basic.pdf", width=5, height=6, bg="white")
+par(mfrow=c(1,1))
+plot(log10(dat1$Chrom_PPI), log10(dat1$Plasmid_PPI), col="blue", cex=0.1,
+     xlab="log10 of the chromosomal PPIs", ylab="log10 of the plasmid PPIs")
+    + grid() # linear model of plasmid & chrom PPIs
+dev.off()
+
+summary(lm(log10(dat1$Plasmid_PPI) ~ log10(dat1$Chrom_PPI))) #not informative
+  # Plasmid_PPI = 0.267*Chrom_PPI + 3.69
+summary(lm( (dat1$Plasmid_PPI) ~  (dat1$Chrom_PPI)))
+  # Plasmid_PPI = 2.063*Chrom_PPI + 36,350
+
+par(mfrow=c(1,3))
+hist(log10(dat1$Fraction), breaks=55)
+plot(log10(dat1$Chrom_PPI), (dat1$Fraction)) + grid()# linear model of plasmid & chrom PPIs
+plot(log10(dat1$Plasmid_PPI), (dat1$Fraction),col="darkgreen") + grid()
+# linear model of plasmid & chrom PPIs
+dev.off()
+
+####
+
+p1 <- ggplot(dat1, aes(x=log10(dat1$Chrom_PPI), y=log10(dat1$Plasmid_PPI))) +
+  geom_point(color ="blue", size=0.3, shape=1, (aes(alpha=0.1)), show.legend=F) +
+  scale_x_continuous(name="Log10 of number of chromosomal PPIs") +
+  scale_y_continuous(name="Log10 of number of plasmid PPIs")  + 
+  geom_smooth(method='lm') +
+  annotation_custom(grobTree(textGrob(paste("For ",length(dat1$Sample)," bacterial samples",sep=""),
+              x=0.02, y=.02, hjust=0, gp=gpar(col="black", fontsize=8)))) +
+  geom_point(data=dat1, aes(x=log10(dat1$Chrom_PPI), y=log10(dat1$Plasmid_PPI)),
+                  size=0.5, shape=1, alpha=0.1, color ="red") + 
+  annotation_custom(grobTree(textGrob(paste("adj_r=",  
+  round(sqrt(summary(lm((dat1$Chrom_PPI) ~ (dat1$Plasmid_PPI)))$adj.r.squared),3),sep=""),
+              x=0.7, y=.02, hjust=0, gp=gpar(col="black", fontsize=8))))  
+p11 <- ggExtra::ggMarginal(p1, type = "densigram", size =6, colour="grey", bins=50)
+p11
+pdf("Chrom_plasmid_PPI_main.pdf", width=6, height=6, bg="white")
+ggarrange(p11, ncol=1, nrow=1)
+dev.off()
+
+###
+
+ggplot(dat1, aes(x=dat1$Chrom_PPI, y=dat1$Plasmid_PPI)) + 
+  geom_smooth(method='lm') +
+  geom_point(color ="blue", size=0.5, shape=1, (aes(alpha=0.2)), show.legend=F) +
+  geom_text_repel(aes(label=dat1$Sample, color="black"), size=3, show.legend=F) +  
+  scale_x_continuous(name="Number of chromosomal PPIs") +
+  scale_y_continuous(name="Number of plasmid PPIs") +
+  annotation_custom(grobTree(textGrob(paste("adj_r2=",  
+  round(summary(lm((dat1$Chrom_PPI) ~ (dat1$Plasmid_PPI)))$adj.r.squared,4),sep=""),
+              x=0.1, y=.83, hjust=0, gp=gpar(col="black", fontsize=12))))+
+  annotation_custom(grobTree(textGrob(paste("adj_r=",  
+  round(sqrt(summary(lm((dat1$Chrom_PPI) ~ (dat1$Plasmid_PPI)))$adj.r.squared),4),sep=""),
+              x=0.1, y=.86, hjust=0, gp=gpar(col="black", fontsize=12)))) +
+  annotation_custom(grobTree(textGrob(paste("For ",length(dat1$Sample)," bacterial samples",sep=""),
+              x=0.1, y=.9, hjust=0, gp=gpar(col="black", fontsize=12))))
+
+ggplot(dat1, aes(x=log10(dat1$Chrom_PPI), y=dat1$Fraction)) + 
+  geom_smooth(method='lm') +
+  geom_point(color ="darkgreen", size=0.5, shape=3, (aes(alpha=0.2)), show.legend=F) +
+  geom_text_repel(aes(label=dat1$Sample, color="darkgreen"), size=2, show.legend=F) +  
+  scale_x_continuous(name="Log10 of number of chromosomal PPIs") +
+  scale_y_continuous(name="Fraction of PPIs that were plasmid-associated", limits=c(0.55,1))+ 
+  annotation_custom(grobTree(textGrob(paste("adj_r2=",  
+  round(summary(lm(log10(dat1$Chrom_PPI) ~ dat1$Fraction))$adj.r.squared,4),sep=""),
+              x=0.1, y=.1, hjust=0, gp=gpar(col="darkgreen", fontsize=12))))+
+  annotation_custom(grobTree(textGrob(paste("adj_r=-",  
+  round(sqrt(summary(lm(log10(dat1$Chrom_PPI) ~ dat1$Fraction))$adj.r.squared),4),sep=""),
+              x=0.1, y=.14, hjust=0, gp=gpar(col="darkgreen", fontsize=12))))+
+  annotation_custom(grobTree(textGrob(paste("For ",length(dat1$Sample)," bacterial samples",sep=""),
+              x=0.1, y=.24, hjust=0, gp=gpar(col="darkgreen", fontsize=12))))
+
+ggplot(dat1, aes(x=log10(dat1$Plasmid_PPI), y=dat1$Fraction)) + 
+  geom_smooth(method='lm') +
+  geom_point(color ="red", size=0.5, shape=2, (aes(alpha=0.2)), show.legend=F) +
+  geom_text_repel(aes(label=dat1$Sample, color="red"), size=2, show.legend=F) +  
+  scale_x_continuous(name="Log10 of number of plasmid PPIs") +
+  scale_y_continuous(name="Fraction of PPIs that were plasmid-associated", limits=c(0.55,1))+ 
+  annotation_custom(grobTree(textGrob(paste("adj_r2=",  
+  round(summary(lm(log10(dat1$Plasmid_PPI) ~ dat1$Fraction))$adj.r.squared,4),sep=""),
+              x=0.1, y=.1, hjust=0, gp=gpar(col="red", fontsize=12))))+
+  annotation_custom(grobTree(textGrob(paste("adj_r=",  
+  round(sqrt(summary(lm(log10(dat1$Plasmid_PPI) ~ dat1$Fraction))$adj.r.squared),4),sep=""),
+              x=0.1, y=.14, hjust=0, gp=gpar(col="red", fontsize=12))))+
+  annotation_custom(grobTree(textGrob(paste("For ",length(dat1$Sample)," bacterial samples",sep=""),
+              x=0.1, y=.24, hjust=0, gp=gpar(col="red", fontsize=12))))
+
+ggplot(dat1, aes(x=dat1$Plasmid_PPI, y=dat1$Fraction)) + 
+  geom_smooth(method='lm') +
+  geom_point(color ="red", size=0.5, shape=5, (aes(alpha=0.2)), show.legend=F) +
+  geom_text_repel(aes(label=dat1$Sample, color="purple"), size=2, show.legend=F) +  
+  scale_x_continuous(name="Number of plasmid PPIs") +
+  scale_y_continuous(name="Fraction of PPIs that were plasmid-associated", limits=c(0.55,1))+ 
+  annotation_custom(grobTree(textGrob(paste("adj_r2=",  
+  round(summary(lm(dat1$Plasmid_PPI ~ dat1$Fraction))$adj.r.squared,4),sep=""),
+              x=0.1, y=.1, hjust=0, gp=gpar(col="purple", fontsize=12)))) +
+  annotation_custom(grobTree(textGrob(paste("adj_r=",  
+  round(sqrt(summary(lm(dat1$Plasmid_PPI ~ dat1$Fraction))$adj.r.squared),4),sep=""),
+              x=0.1, y=.14, hjust=0, gp=gpar(col="purple", fontsize=12))))+
+  annotation_custom(grobTree(textGrob(paste("For ",length(dat1$Sample)," bacterial samples",sep=""),
+              x=0.1, y=.24, hjust=0, gp=gpar(col="purple", fontsize=12))))
+
+dev.off()
+
+## Cluster analysis
+z <- data.frame(dat1$Chrom_PPI, dat1$Plasmid_PPI) # dataframe
+means <- apply(z,2,mean)
+sds <- apply(z,2,sd)
+nor <- scale(z,center=means,scale=sds)
+distance = dist(nor) # Calculate distance matrix 
+
+# or just
+dist <- get_dist(scale(z))
+fviz_dist(dist, gradient = list(low = "#00AFBB", mid = "white", high = "#FC4E07"))
+
+plot(hclust(distance),labels= dat1$Sample, main='Default from hclust') # Hierarchical agglomerative clustering 
+plot(hclust(distance),hang=-1, labels=dat1$Sample, main='Default from hclust')
+
+plot(hclust(distance,method="average"), labels=dat1$Sample) # Hierarchical agglomerative clustering
+plot(hclust(distance,method="average"), hang=-1 , labels=dat1$Sample) # using “average” linkage
+
+member = (cutree(hclust(distance,method="average"),2)) # Cluster membership
+table(member)
+aggregate(nor,list(member),mean)
+aggregate(mydata[,-c(1,1)],list(member),mean)
+
+plot(silhouette(cutree(hclust(distance,method="average"),3), distance)) # Silhouette Plot
+# if any bar is -ve, can conclude particular data is outlier to remove from our analysis
+
+wss <- (nrow(nor)-1)*sum(apply(nor,2,var))
+for (i in 2:20) wss[i] <- sum(kmeans(nor, centers=i)$withinss)
+plot(1:20, wss, type="b", xlab="Number of Clusters", ylab="Within groups SS")
+# Scree plot shows the variabilities in clusters,
+# eg if we increase the number of clusters within-group SS falls.
+# see more at # https://finnstats.com/index.php/2021/04/10/neural-network-in-r/
+
+set.seed(123)
+kc<-kmeans(nor,2) # K-means clustering
+ot<-nor
+datadistshortset<-dist(ot,method = "euclidean")
+hc1 <- hclust(datadistshortset, method = "complete" )
+pamvshortset <- pam(datadistshortset,4, diss = F)
+clusplot(pamvshortset, shade=F,labels=2, col.clus="blue",col.p="red",span=F)
+
+k2 <- kmeans(nor, centers = 2, nstart = 25) # Cluster Analysis in R
+# kmeans function has nstart option that attempts multiple initial configurations
+# and reports on the best output. Eg adding nstart = 25 makes 25 initial configurations.
+fviz_cluster(k2, data=nor) # If >2 dimensions, fviz_cluster does PCA as PC1 vs PC2
+# see more at https://finnstats.com/index.php/2021/04/12/linear-optimization-using-r/
+
+fviz_nbclust(nor, kmeans, method = "wss") # Optimal Clusters
+fviz_nbclust(nor, kmeans, method = "silhouette") # Average Silhouette Method
+fviz_gap_stat(clusGap(nor, FUN = kmeans, nstart = 25, K.max = 10, B = 50))
+# gap stat compares total intracluster variation vs expected across k 
+
+# from https://www.r-bloggers.com/2021/04/cluster-analysis-in-r/
+```
+
+
+
+
+

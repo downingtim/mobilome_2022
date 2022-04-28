@@ -1,0 +1,255 @@
+---
+title: "Get unique plasmids and PPIs per sample"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# This script gets all the  genes per sample called "X_chrom_data.csv"
+# etc and puts them in a local folder "OUTPUT7". Per sample this shows their
+# index, gene name (Gene), plasmid status (Plasmid, where 0=plasmid-related),
+# and total number of PPIs (Interactions).
+
+# This script gets all the chromosomal genes per sample called "X_chrom_data.csv"
+# etc and puts them in a local folder "OUTPUT6". Per sample this shows the
+# index, the String IDs for the protein pairs, combined score, the short String
+# IDs for the protein pairs and number of chromosomal PPIs (labelled "c") 
+
+# You need the list of plasmid genes: unique_plasmid_Genes_v3.csv
+# 
+# You need "stringInput.csv" in your local folder. Get it from Figshare doi:
+# https://doi.org/10.6084/m9.figshare.19674027.v1
+
+# BiocManager::install("genbankr", ask=F) # v1.0.0
+library(genbankr)
+# install.packages("igraph", ask=F) # v1.0.0
+library(igraph)
+# BiocManager::install(c("STRINGdb"), ask=F) # , version="3.8") #  
+# see https://bioconductor.org/packages/devel/bioc/vignettes/STRINGdb/inst/doc/STRINGdb.pdf
+#STRINGdb$methods()              # To list all the methods available.
+#STRINGdb$help("get_graph")      # To visualize their documentation.
+library(STRINGdb)     # activate the STRINGdb library # eg species_id=9606 is Homo sapiens 
+#install.packages("VennDiagram", ask=F)
+library(VennDiagram)
+#install.packages("rentrez", ask=F)
+library(rentrez)
+#install.packages("tidyverse", ask=F)
+library(tidyverse)
+# install.packages("dplyr", ask=F)
+library(dplyr)
+# install.packages("stringr", ask=F)
+library(stringr)
+#BiocManager::install("GenomicRanges", ask=F)
+library(GenomicRanges)
+#install.packages("readr", ask=F)
+library(readr)
+# install.packages("curl", ask=F)
+library(curl)
+# install.packages("httr", ask=F)
+library(httr)
+options(warn=-1)
+# READ IN K AS USER INPUT
+library(ggrepel)
+library(data.table)
+library(openxlsx)
+
+# TESTING 
+#plasmid <- c()
+#try({plasmid <- readGenBank(GBAccession("CP021116.1"), partial=T)}, silent=T) #  ok
+#plasmid <- c()
+#try({plasmid <- readGenBank(GBAccession("CP020972.1"), partial=T)}, silent=T) # not ok
+
+####### define functions #########
+getplasmidgenes <- function(GBAccession_ID){ #  function 
+  plasmid_genes <- c("")
+  plasmid <- c()
+  try({plasmid <- readGenBank(GBAccession(GBAccession_ID), partial=T)}, silent=T)
+  # cds(plasmid)$product # gene long names
+  # cds(plasmid)$gene    # gene short names
+  if(!(is.null(plasmid))){
+    plasmid_genes <- unique(sort(tolower(as.vector(na.omit( cds(plasmid)$gene))))) 
+    plasmid_genes <- gsub("[()]",  replacement="", plasmid_genes) # remove ( + )
+    # unique protein-coding genes all uppercase sorted #  length(plasmid_genes)
+    return(tolower(plasmid_genes)) }
+  else { return(tolower("-1"))} } # end else
+
+#--- function4 --- get plasmid metadata: (1) plasmid nickname, (2) species,
+# (3) strain, (4) length, (5) number of genes
+#table <- setDT(table, keep.rownames = TRUE)[] #convert rowname to the first column
+getdata <- function(GBAccession_ID){
+  plasmid <- readGenBank(GBAccession(GBAccession_ID), partial=TRUE)
+  #read in information from plasmid accession number
+  w <- elementMetadata(sources(plasmid))
+  #get metadata(type,organism,mol_type,strain,db_xref,plasmid,loctype,temp_grouping_id)
+  name <- w$plasmid #plasmid name
+  species <- w$organism #species
+  species <- gsub(" ",  replacement="_", species)
+  strain <- w$strain #strain
+  if(is.null(strain) == TRUE){   strain <- 0 }
+  genes <- elementMetadata(genes(plasmid))$gene 
+  genes <- gsub("[()]",  replacement="", genes) 
+  genes <- length(genes) #number of plasmid genes
+  u.genes <- unique(sort(tolower(as.vector(na.omit(cds(plasmid)$gene))))) #remove redundant genes
+  u.genes <- gsub("[()]",  replacement="", u.genes) 
+  u.genes <- length(u.genes)    #number of unique plasmid genes
+  element <- length(elementMetadata(exons(plasmid))$type)
+  info <- seqinfo(plasmid)  #get plasmid information
+  df_plasmid <- as.data.frame(info)
+  length <- df_plasmid$seqlengths #plasmid length
+  metadata <- c(name,species,strain,genes,u.genes,element,length) #combine all data
+}
+######## end set up functions #########
+
+setwd("~/Google Drive/TDA_Summer2021/RMD_FILES")
+getwd()
+input <- data.frame(read.csv("stringInput.csv")) # species, proteins, String_ID
+input$Species <- gsub("/",  replacement="-", input$Species)
+input$interactions <- rep(0, length(input$Species))
+
+#accessID2 <- as.vector(read.csv("plasmid.txt")) 
+#str(accessID2) # 2825 plasmids from the ENA to test 
+
+# https://datadryad.org/stash/dataset/doi:10.15146/R33X2J # Plasmids database
+# Brooks et al 2019 doi: 10.1128/MRA.01325-18 #  complete and assembled plasmids
+accessID <- data.frame(read.csv("plasmids__2020_11_19__v0.4.1/plsdb.tsv", sep = "\t"))
+str(accessID$ACC_NUCCORE) # 27939 entries
+
+# PLSDB v2020_11_19 https://ccb-microbe.cs.uni-saarland.de/plsdb/plasmids/download
+accessID1 <- data.frame(read.csv("PLSDB/Metadata.csv"))$Locus_ID
+accessID1 <- accessID1[-c(3867)] # remove one bad sample
+str(accessID1) # 6641 plasmids from the PLSDB to test 
+
+accessID2 <- c(accessID$ACC_NUCCORE, accessID1)
+accessID3 <- sort(unique(accessID2))
+str(accessID3) # combined unique 32,839 plasmids "AJ297913.2"
+
+vector1 <- c()
+vector1 <- data.frame(read.csv("unique_new_plasmids.csv"))
+str(vector1) # 18629 obs. of  3 variables
+
+for (jj in 1:length(accessID3)){
+     temp <- length(getplasmidgenes(accessID3[jj])) # genes, single vector of names
+     vector1 <- rbind(vector1, data.frame(accessID3[jj], temp)) } # } # end if and for 
+str(vector1)
+accessID4 <- subset(vector1, temp>1)
+str((accessID4)) # 18,629 plasmids potentially 
+# write.csv(accessID4,  "unique_new_plasmids_2.csv")
+accessID2 <- accessID4
+str(accessID2)
+hist(log10(accessID2$temp), breaks=25, ylab="Number of plasmids", 
+     xlab="Log10 of number of genes", main="", col="red") + grid()
+
+setwd("~/Google Drive/TDA_Summer2021/RMD_FILES")
+plasmidGenes_Table2 <- data.frame(read.csv("plasmidGenesTable.csv"))
+plasmidGenes_Table2 <- plasmidGenes_Table2[,-c(1)]
+dim(plasmidGenes_Table2) # 4,445 samples x 9,172 genes
+plasmidGenes_Table2[1:3,1:4] 
+
+plasmidGenes_Table2 <- data.frame(Gene=character(), Plasmid=character())
+# table linking genes to plasmids
+
+plasmidGenes <- c() # full list of plasmid genes from 18629 plasmids
+for (jj in 1:length(accessID2$accessID3.jj.)){ #  
+  input <- getplasmidgenes(accessID2$accessID3.jj.[jj]) # gene list
+  if(input != -1){  plasmidGenes <- sort(unique(c(plasmidGenes, input))) } 
+  # make tasble of each plasmid-associated gene, along with accession from DB
+  for (mm in 1:length(input)){ # for each plasmid-associated gene
+      # print(getdata(accessID2$accessID3.jj.[jj]))
+      plasmidGenes_Table2 <- rbind(plasmidGenes_Table2, c(input[mm], accessID2$accessID3.jj.[jj]))
+  } # end for each plasmid-associated gene
+  print(jj)
+}# end for plasmids # remove apostrophes
+
+plasmidGenes_Table2 <- plasmidGenes_Table2[!(plasmidGenes_Table2$Gene==-1),]
+# remove invalid rows
+colnames(plasmidGenes_Table2) <- c("Gene", "Plasmid")
+str(plasmidGenes_Table2) # check it worked # need to make unique
+write.xlsx(plasmidGenes_Table2 %>% distinct(), "plasmidGenes_Table3.xlsx")
+# found 363,425 gene-plasmid associations in total
+dim(plasmidGenes_Table2)
+length(unique(plasmidGenes_Table2$Gene)) # 8,895 unique genes
+length(unique(plasmidGenes_Table2$Plasmid)) # 15,190 unique plasmids
+
+############
+############
+############
+
+for (k in 1:length(plasmidGenes)){plasmidGenes[k] <- gsub("'",  replacement="", plasmidGenes[k])}
+#write.csv(plasmidGenes, "unique_plasmid_Genes_v3.csv") # write out
+plasmidGenes2 <- read.csv("unique_plasmid_Genes_v3.csv") # write out
+plasmidGenes <- plasmidGenes2$x
+str(plasmidGenes) # 9,172 unique plasmid-associated annotated genes
+
+
+# make table of plasmidGenes, add gene presence/absence
+# make table of plasmidGenes PPIs, add PPI presence/absence
+# add number of PPIs per protein
+
+for (k in 1:4445){     # change k  
+     if((k != 25)&&(k != 99)&&(k != 235)&&(k != 246)&&(k !=266)&&(k !=345)
+        &&(k !=349)&&(k !=376)&&(k !=546) 
+        &&(k !=403)&&(k !=407)&&(k !=416)&&(k !=419)&&(k !=485)&&(k !=529)
+        &&(k !=559)&&(k !=622)&&(k !=691)&&(k !=4377)&&(k !=4378)# 5 => 18 not work
+     ){  #  if
+       print(k)
+       
+      string_db <- STRINGdb$new(version="11", species=input$ID[k], # new STRINGdb object
+                                score_threshold=400, input_directory="")
+      # string_db$proteins$preferred_name contains the list of genes, eg "DR97_1"
+      mapped <- string_db$map(data.frame(gene_name = string_db$proteins$preferred_name),
+                                'gene_name', removeUnmappedRows=T) 
+      # mapped is a table with gene_name and STRING_id      # str(mapped) } } 
+      links_all1 <- string_db$get_interactions(string_db$mp(string_db$proteins$preferred_name)) 
+      links_all <- links_all1[!duplicated(links_all1[,c('from','to')]),]
+      # links_all is a table with the STRING_ids of the 
+      # connected proteins (cols 1 & 2) & their score (col 3)
+      # links_all does not contain duplicates (unlike links_all1)
+
+      # Now create a table for all genes with STRING_ids and combined score
+      from_vector <- c()			# empty vector for gene names rather than STRING_ids
+      to_vector <- c()				# empty vector for gene names rather than STRING_ids  
+      for (i in 1:length(links_all$from)){		# for each STRING_id, extract the gene name
+        from_vector[i] <- subset(mapped, STRING_id == links_all$from[i])$gene_name
+        to_vector[i] <- subset(mapped, STRING_id == links_all$to[i])$gene_name }
+      links_all$from_ID <- tolower(from_vector)
+      links_all$to_ID <- tolower(to_vector) 
+      links_all$c <- rep(0,length(to_vector)) # specify chrom interaction
+      str(links_all)  # now: from, to, combined_score, from_ID, to_ID
+
+      ######## get plasmids' gene interactions # select plasmid-associated interactions
+      links_genes <- data.frame(unique(sort(c(links_all$from_ID,links_all$to_ID)))) # all genes
+      links_genes$Plasmid <- rep(0,length(links_genes[,1]))
+      links_genes$Interactions <- rep(0,length(links_genes[,1]))
+      colnames(links_genes) <- c("Gene","Plasmid","Interactions")
+      str(links_genes) # eg 7,203 genes
+     #  View(data.frame(unique(tolower(mapped$gene_name))))
+      
+      mapped_p <- data.frame() # has from/to data
+      for (m in 1:length(plasmidGenes)){	# for all plasmid genes
+        mapped_p <- rbind(mapped_p, # add in mapped genes
+          data.frame(subset(links_all, (to_ID==plasmidGenes[m])|(from_ID==plasmidGenes[m]))))
+          if(length(subset(links_genes, Gene==plasmidGenes[m])[,1]) > 0){ # if match
+             links_genes[links_genes$Gene == plasmidGenes[m],2] <- 1    } # end if
+        } # end for
+      str(mapped_p) # very redundant list
+      for (m in 1:length(links_all$c)){	# get plasmid genes 
+        tempy <- subset(mapped_p, (to_ID==links_all$to_ID[m])|(from_ID==links_all$from_ID[m]))
+        if(length(tempy$from) > links_all$c[m]){ links_all$c[m] <- length(tempy$from) } 
+        
+        if(length(subset(links_genes, Gene==links_all$to_ID[m])[,1]) > 0){ # if match
+          tem <- subset(mapped_p, (to_ID==links_all$to_ID[m]))
+          links_genes[links_genes$Gene==links_all$to_ID[m], 3] <- length(tem$from) } # end if
+        if(length(subset(links_genes, Gene==links_all$from_ID[m])[,1]) > 0){ # if match
+          tem2 <- subset(mapped_p, (from_ID==links_all$from_ID[m]))
+          links_genes[links_genes$Gene==links_all$from_ID[m], 3] <- length(tem2$from) } # end if
+        } # end for
+
+    write.csv(links_all, paste("OUTPUT6/", input$Species[k], "_chrom_data.csv", sep=""))
+    write.csv(links_genes, paste("OUTPUT7/", input$Species[k], "_genes_data.csv", sep=""))
+  } # end if k is ok
+} # end for all species
+
+#  cd OUTPUT6/
+# ls *_chrom_data.csv | perl -e 'print "Sample\tPlasmid_PPI\tChrom_PPI\tFraction\n"; @a=<>; for $e (0..$#a){ chomp($a[$e]); open(IN,$a[$e]); $c=0; $c2=0; while(<IN>){   chomp; @r=split/\,/,$_; if($r[-1] >0){ $c++; } elsif($r[-1]==0){ $c2++; } } $a[$e]=~ s/_chrom_data.csv//g; print "$a[$e]\t$c\t$c2\t",sprintf("%.3f",$c/($c+$c2)),"\n"; }' # > example_list.csv
+
+```
+

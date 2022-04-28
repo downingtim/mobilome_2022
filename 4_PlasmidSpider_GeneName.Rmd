@@ -1,0 +1,2437 @@
+---
+title: "Plasmid-related gene & PPI main analysis"
+---
+
+```{r setup, include=FALSE}
+# Potential input files [1] - [17] read from the local folder
+# There are 17 listed, only number [1] is essential
+# 
+# all_PPIs_4377.tar -> 4,377 samples' CSV files for all proteins showing the
+# index, gene name (Gene), plasmid status (Plasmid, where 0=plasmid-related),
+# and total number of PPIs (Interactions) - for each sample
+
+# [1]  stringInput.csv = the species, proteins & String_ID - get it from
+#      Figshare doi: https://doi.org/10.6084/m9.figshare.19674027.v1
+# [2]  plasmidGenesTable.i.csv for i=0 to i=23 inclusive, containing the matrix 
+#      of all 9,172 plasmid-related genes across the 4,445 samples - don't try
+#      to run this unless you have a long time to wait for it to work - each has
+#      partial data that is amalgamated together for the final correct matrix
+# [3]  plasmidGenesTable2.csv = the final version of [2]
+# [4]  GeneName_presence.csv = 4,445 samples with their, stringID, CorrectNames,
+#      and LongNames to test for gene name length
+# [5]  Acinetobacter.xlsx = example data to test the gene name comparison
+# [6]  Gene_rates_4393.csv = rates of plasmid & chrom genes for 4,393 samples -
+#      this is not essential, the code with generate this.
+# [7]  Plasmid_PPI.xlsx = 4,377 samples' plasmid & chromosomal PPI rates
+# [8]  Plasmid_PPI_data_PMNLE_corrected2.csv = 4,377 samples with their String ID,
+#      chromosomal aPMNLE, chromosomal cThreshold, chromosomal cTriangles, 
+#      chromosomal cEdges, chromosomal cVertices, chromosomal cNonTrivialLoops,
+#      and chromosomal cConnectedComponents
+# [9]  approximatePMNLE_Feb2022_v2.xlsx = like [8] but with 4,445 samples shown
+#      where some contain no relevant data
+# [10] approximatePMNLE_all.xlsx = like [8] but with 4,422 samples shown
+#      where some contain no relevant data
+# [11] approximatePMNLEmodified.xlsx  = like [8] but with 4,422 samples shown
+#      where some contain no relevant data
+# [12] Table_S3.xlsx = 4,377 samples with the plasmid-related 
+#      PPIs (Plasmid_PPI), chromosomal PPIs (Chrom_PPI), fraction of PPIs that 
+#      were plasmid-related (Fraction), numbers of proteins per sample
+#      (inputProteins), number of PPIs (interactions), number of plasmid genes
+#      (Plasmid_genes), chromosomal aPMNLE (aPMNLE), chromosomal trios (cTri),
+#      chromosomal indirect loops (loops), chromosomal connected components (ccs),
+#      all proteins aPMNLE (aPMNLE_all), all proteins trios (cTri_all), all 
+#      proteins indirect loops (loops_all), and all proteins connected components
+#      (ccs_all)
+# [13] OUTPUT7 -> points to chromosomal_PPIs_4377.tar.gz -> 4,377 samples' CSV
+#      files for all proteins showing the index, the String IDs for the protein
+#      pairs, combined score, the short String IDs for the protein pairs and
+#      number of chromosomal PPIs (c) - for each sample
+#      See it at Zenodo at https://doi.org/10.6084/m9.figshare.X
+# [14] Data_for_Fig_S7_metasamples.csv = metasamples from NMF on plasmid gene
+#      presence-absence matrix
+# [15] Data_for_Fig_S11_metasamples.interactions.all.csv = mixture gene
+#      coefficients from NMF on plasmid gene presence-absence matrix
+# [16] Data_for_Fig_S8_mixture_coefficients.interactions.all.csv = metasamples
+#      from NMF on plasmid gene PPI rates matrix
+# [17] Data_for_Fig_S12_mixture_coefficients.interactions.all.csv = mixture 
+#      gene coefficients from NMF on plasmid gene PPI rates matrix
+
+
+# install.packages("genbankr", ask=F) # v1.0.0
+library(genbankr)
+# install.packages("igraph", ask=F) # v1.0.0
+library(igraph)
+# BiocManager::install(c("STRINGdb"), ask=F) # , version="3.8") #  
+# see https://bioconductor.org/packages/devel/bioc/vignettes/STRINGdb/inst/doc/STRINGdb.pdf
+#STRINGdb$methods()              # To list all the methods available.
+#STRINGdb$help("get_graph")      # To visualize their documentation.
+library(STRINGdb)     # activate the STRINGdb library # eg species_id=9606 is Homo sapiens 
+#install.packages("VennDiagram", ask=F)
+library(VennDiagram)
+#install.packages("rentrez", ask=F)
+library(rentrez)
+#install.packages("tidyverse", ask=F)
+library(tidyverse)
+# install.packages("dplyr", ask=F)
+library(dplyr)
+# install.packages("stringr", ask=F)
+library(stringr)
+#BiocManager::install("GenomicRanges", ask=F)
+library(GenomicRanges)
+#install.packages("readr", ask=F)
+library(readr)
+# install.packages("curl", ask=F)
+library(curl)
+# install.packages("httr", ask=F)
+library(httr)
+# install.packages("openxlsx")
+library(openxlsx)
+library(ggrepel)
+options(warn=-1)
+# READ IN K AS USER INPUT
+library(dplyr)
+library(ggpubr)
+#install.packages("hash")
+library(hash)
+
+####### define functions #########
+
+# Multiple plot function
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+# Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+  numPlots = length(plots)
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) { # Make the panel
+  # ncol: Number of columns of plots
+  # nrow: Number of rows needed, calculated from # of cols
+  layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+  ncol = cols, nrow = ceiling(numPlots/cols))}
+
+    if (numPlots==1) { print(plots[[1]]) }
+    else { # Set up the page
+      grid.newpage()
+       pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+      # Make each plot, in the correct location
+      for (i in 1:numPlots) { # Get the i,j matrix positions of the regions that contain this subplot
+        matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+        print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,layout.pos.col = matchidx$col)) }
+     }
+}
+
+
+getplasmidgenes <- function(GBAccession_ID){ #  function 
+  plasmid_genes <- c("")
+  plasmid <- c()
+  try({plasmid <- readGenBank(GBAccession(GBAccession_ID), partial=T)}, silent=T)
+  # cds(plasmid)$product # gene long names
+  # cds(plasmid)$gene    # gene short names
+  if(!(is.null(plasmid))){
+    plasmid_genes <- unique(sort(tolower(as.vector(na.omit( cds(plasmid)$gene))))) 
+    plasmid_genes <- gsub("[()]",  replacement="", plasmid_genes) # remove ( + )
+    # unique protein-coding genes all uppercase sorted #  length(plasmid_genes)
+    return(tolower(plasmid_genes)) }
+  else { return(tolower("-1"))} } # end else
+######## end set up functions #########
+
+########################################################################
+########### Import gene names #### #### #### #### #### #### #### #### ####
+########################################################################
+
+setwd("~/Google Drive/TDA_Summer2021/RMD_FILES")
+input <- data.frame(read.csv("stringInput.csv")) # species, proteins, String_ID
+input$Species <- gsub("/",  replacement="-", input$Species)
+input$interactions <- rep(0, length(input$Species))
+
+########################################################################
+########### Create sample-gene matrix for all plasmid-related genes ####
+########################################################################
+# make PPI data across samples, merging from different files yay
+# on server /media/newdrive/tim/PPIN_files ###
+# need to split files up to run jobs, putting them back together again
+# humpty dumpty style as a series of partially filled matrices
+
+setwd("~/GoogleD/TDA_Summer2021/RMD_FILES/plasmidGenesTable_FILES")
+x0 <- data.frame(read.csv("plasmidGenesTable.0.csv"))
+dim(x0)
+x1 <- data.frame(read.csv("plasmidGenesTable.1.csv"))
+dim(x1)
+x2 <- data.frame(read.csv("plasmidGenesTable.2.csv"))
+dim(x2)
+x3 <- data.frame(read.csv("plasmidGenesTable.3.csv"))
+dim(x3)
+x4 <- data.frame(read.csv("plasmidGenesTable.4.csv"))
+dim(x4)
+x5 <- data.frame(read.csv("plasmidGenesTable.5.csv"))
+dim(x5)
+x6 <- data.frame(read.csv("plasmidGenesTable.6.csv"))
+dim(x6)
+x7 <- data.frame(read.csv("plasmidGenesTable.7.csv"))
+dim(x7)
+x8 <- data.frame(read.csv("plasmidGenesTable.8.csv"))
+dim(x8)
+x9 <- data.frame(read.csv("plasmidGenesTable.9.csv"))
+dim(x9)
+x10 <- data.frame(read.csv("plasmidGenesTable.10.csv"))
+dim(x10)
+x11 <- data.frame(read.csv("plasmidGenesTable.11.csv"))
+dim(x11)
+x12 <- data.frame(read.csv("plasmidGenesTable.12.csv"))
+dim(x12)
+x13 <- data.frame(read.csv("plasmidGenesTable.13.csv"))
+dim(x13)
+x14 <- data.frame(read.csv("plasmidGenesTable.14.csv"))
+dim(x14)
+x15 <- data.frame(read.csv("plasmidGenesTable.15.csv"))
+dim(x15)
+x16 <- data.frame(read.csv("plasmidGenesTable.16.csv"))
+dim(x16)
+x17 <- data.frame(read.csv("plasmidGenesTable.17.csv"))
+dim(x17)
+x18 <- data.frame(read.csv("plasmidGenesTable.18.csv"))
+dim(x18)
+x19 <- data.frame(read.csv("plasmidGenesTable.19.csv"))
+dim(x19)
+x20 <- data.frame(read.csv("plasmidGenesTable.20.csv"))
+dim(x20)
+x21 <- data.frame(read.csv("plasmidGenesTable.21.csv"))
+dim(x21)
+x22 <- data.frame(read.csv("plasmidGenesTable.22.csv"))
+dim(x22)
+x23 <- data.frame(read.csv("plasmidGenesTable.23.csv"))
+dim(x23)
+
+new <- rbind( x1[   1: 445, 1:9173],  x2[ 446: 890, 1:9173],
+              x3[ 891:1345, 1:9173],  x4[1346:1790, 1:9173],
+              x5[1791:2235, 1:9173],  x6[2236:2681, 1:9173],
+				      x7[2682:3025, 1:9173],  x8[3026:3472, 1:9173],
+				      x9[3473:3561, 1:9173], x10[3562:3651, 1:9173],
+				     x11[3652:3742, 1:9173], x12[3743:3832, 1:9173],
+				     x13[3833:3920, 1:9173],  x0[3921:4000, 1:9173],
+				     x14[4001:4080, 1:9173], x15[4081:4120, 1:9173],
+				     x19[4121:4160, 1:9173], x16[4161:4200, 1:9173], 
+				     x20[4201:4210, 1:9173], x21[4211:4219, 1:9173],
+				     x22[4220:4229, 1:9173], x21[4230:4240, 1:9173],
+				     x17[4241:4330, 1:9173], x18[4331:4445, 1:9173])
+				   
+setwd("~/GoogleD/TDA_Summer2021/RMD_FILES/")
+# dim(new) # genes = 9172 columns, samples = 4445 rows 
+# new[is.na(new)] <- 0
+# new[,1] <- input[new[,1],]$Species # input from above
+# new <- new[-c(1)]
+# write.csv(new, "plasmidGenesTable.csv")
+# tim stop calling things "new"
+########################################################################
+########### Load plasmid-related genes table from above ########### ####
+########################################################################
+
+# read in data after having made it already above and exported it
+new <- read.csv("plasmidGenesTable2.csv")
+new <- new[-c(1)] # drop empty column
+new[2447:2449,21:24] # example of data
+rownames(new) <- new[,1]
+new <- new[-c(1)] # drop unneeded column
+rowSums(new[1211:1213,]) # K12 MG1655
+
+########################################################################
+########### Gene name analysis #########################################
+########################################################################
+
+#create an empty table
+#table <- data.frame(k=integer(), species=character(), StringID=character(),
+#                    CorrectNames=character(), LongNames=character())
+
+###########
+for (k in 1:4445){     # change k  1:4445
+     if((k != 25)&&(k != 99)&&(k != 235)&&(k != 246)&&(k !=266)&&(k !=345)
+      &&(k !=349)&&(k !=376)&&(k !=403)&&(k !=407)&&(k !=416)&&(k !=419)
+      &&(k !=485)&&(k !=529)&&(k !=546) # 7
+      &&(k !=559)&&(k !=622)&&(k !=691)&&(k !=4377)&&(k !=4378) ){  #  if
+       
+      string_db <- STRINGdb$new(version="11", species=input$ID[k], # new STRINGdb object
+                                score_threshold=400, input_directory="")
+      # string_db$proteins$preferred_name contains the list of genes, eg "DR97_1"
+      mapped <- string_db$map(data.frame(gene_name = string_db$proteins$preferred_name),
+                                'gene_name', removeUnmappedRows=T) 
+      mapped$gene_name <- str_to_lower(mapped$gene_name)
+      str(mapped$gene_name)
+      removePat <- "[_-].{1}$" # remove weird digits
+      mapped$gene_name1 <- gsub(removePat, "", mapped$gene_name)
+      # str(mapped$gene_name1)
+      four=0;
+      long=0;
+      for (i in 1:length(mapped$gene_name)){
+          if(nchar(mapped$gene_name[i]) > 4){ long = long+1 }} # if > 4 letters
+      four = length(mapped$gene_name) - long
+      table[k,] <- c(k, input$Species[k], input$ID[k], four, long)
+  } # end if k is ok
+} # end for all species
+###
+
+# Check gene names lengths - most are short
+# write.csv(table, "GeneName_presence.csv") 
+table1 <- data.frame(read.csv( "OLDFILES/GeneName_presence.csv"))
+str(table1) # 4445 samples x species, stringID, CorrectNames, LongNames
+table1_old <- table1
+table1 <- subset(table1_old, CorrectNames>310)
+table1 <- table1[,-c(1)]
+str(table1) # now 2982 samples
+hist(table1$CorrectNames, breaks=262) + grid()
+
+#table1_old <- table1_old[-c(1,2)]
+str(na.omit(table1_old))
+summary(na.omit(table1_old))
+sd(na.omit(table1_old$CorrectNames))
+sd(na.omit(table1_old$LongNames))
+
+pdf("Gene_Name_Matches.pdf", width=6, height=11, bg="white")
+par(mfrow=c(2,1))
+plot(log10(table1$LongNames), log10(table1$CorrectNames),
+     pch=".", col="red",   xlab="Log10 of number of long gene names",
+     ylab="Log10 of number of short gene names") + grid()
+plot((table1$LongNames), (table1$CorrectNames),
+     pch=".", col="blue", xlab="Number of long gene names",
+     ylab="Number of short gene names") + grid()
+dev.off()
+
+summary(na.omit(table1_old$CorrectNames))
+#    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#        0.0     0.0   411.0   428.7   574.0  4075.0 
+summary(na.omit(table1_old$LongNames))
+#    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#       4    1935    2931    3203    4046   11207 
+
+write.csv(table1, "Valid_samples_Gene_Names.csv")
+
+############## OLD ######################################
+# check gene names in Acinetobacter only
+ex1 <- read.xlsx("~/GoogleDrive/TDA_Summer2021/Key_Results_Figures/OLDFILES/Acinetobacter.xlsx")
+# str(ex1)
+ 
+pdf("OLDFILES/Acinetobacter_check.pdf", width=6, height=11, bg="white")
+par(mfrow=c(2,1))
+plot(log10(ex1$CorrectNames), log10(ex1$Plasmid_PPI), col="red") + grid()
+cor.test(log10(ex1$CorrectNames), log10(ex1$Plasmid_PPI))
+plot((ex1$Fraction_CorrectNames), (ex1$Fraction_PlasmidPPIs), xlim=c(0,1), col="blue") + grid()
+cor.test((ex1$Fraction_CorrectNames), (ex1$Fraction_PlasmidPPIs))
+dev.off()
+
+################################################################
+########################################################################
+########### Amalgamate summary data into Table S3 ################# ####
+########################################################################
+
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/OUTPUT7")
+# make correct numbers of plasmid-related genes per sample in "Gene_rates"
+# input = Gene	Plasmid	Interactions
+# need Gene_rates: Sample	=> Plasmid_genes
+Gene_rates <- as.data.frame(matrix(0, ncol=3, nrow =4393))
+colnames(Gene_rates) <- c("Sample","Plasmid_genes", "Chrom_genes")
+str(Gene_rates) # 4395 samples 
+
+for (k in 1:length(list.files(pattern = "\\.csv$"))){ # read in 4,393 files
+     name <- list.files(pattern = "\\.csv$")[k]
+     try ( in2 <- data.frame(read.csv(name)) )
+     in2 <- in2[,-c(1)]
+     name = gsub("\\.(?=[^.]*\\.)", "", name, perl=T)
+     name = gsub("\\:", "", name, perl=T)
+     name = gsub("_genes_data.csv", "", name, perl=T)
+     print(k) #     str(in2)
+     Gene_rates$Sample[k] <- name
+     Gene_rates$Plasmid_genes[k] <- length(subset(in2, Plasmid==1)$Gene)
+     Gene_rates$Chrom_genes[k] <- length(subset(in2, Plasmid==0)$Gene)
+     } # end for
+# write.csv(Gene_rates, "../Gene_rates_4393.csv")
+Gene_rates <- read.csv("../Gene_rates_4393.csv")
+Gene_rates <- Gene_rates[,-c(1)]
+str(Gene_rates) # 4393 samples 
+hist(subset(Gene_rates, Plasmid_genes>0)$Plasmid_genes, breaks=99) + grid()
+hist(Gene_rates$Chrom_genes, breaks=69) + grid()
+plot(Gene_rates$Plasmid_genes, Gene_rates$Chrom_genes, cex=0.1) + grid()
+
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/RMD_FILES")
+Plasmid_PPI_data <- read.xlsx("Plasmid_PPI.xlsx") # , sheetIndex = 1)
+str(Plasmid_PPI_data) # 4377 samples of their plasmid PPI rates
+        # Sample, Plasmid_PPI, Chrom_PPI, Fraction
+Plasmid_PPI_data$inputProteins <- c(0)
+Plasmid_PPI_data$interactions  <- c(0)
+Plasmid_PPI_data$Plasmid_genes <- c(0)
+
+Final_Table <- read.xlsx("FinalTable.xlsx") # , sheetIndex=1) # ok
+str(Final_Table) # 4377 obs. of  6 variables:
+# get inputProteins in column 5 and interactions in column 6
+
+for (k in 1:length(Plasmid_PPI_data$Sample)){
+  Plasmid_PPI_data[k,]$Sample <- gsub("\\:", replacement="_", Plasmid_PPI_data[k,]$Sample, perl=T)
+  print(k)
+  
+    for (i in 1:length(Final_Table$Sample)){
+    if(Final_Table[i,]$Sample == Plasmid_PPI_data[k,]$Sample){
+       # print(Plasmid_PPI_data[k,]$Sample)
+       Plasmid_PPI_data[k,5] <- Final_Table[i,5];
+       Plasmid_PPI_data[k,6] <- Final_Table[i,6];    }  } # end for
+
+  for (i in 1:length(Gene_rates$Plasmid_genes)){
+    if(Gene_rates[i,]$Sample == Plasmid_PPI_data[k,]$Sample){
+       Plasmid_PPI_data[k,7] <- Gene_rates[i,2]   }   } # end for
+} # end for  
+hist(subset(Plasmid_PPI_data, Plasmid_genes>0)$Plasmid_genes, breaks=99) + grid()
+hist(subset(Plasmid_PPI_data, Plasmid_genes>-1)$Plasmid_genes, breaks=99) + grid()
+
+str(Plasmid_PPI_data)
+View(Plasmid_PPI_data) # 4377 obs. of  10 variables
+        # Sample, Plasmid_PPI, Chrom_PPI, Fraction, 
+        #  inputProteins, interactions, Plasmid_genes
+# subset(Plasmid_PPI_data, Plasmid_genes == 0 & Plasmid_PPI > 0)$Sample
+subset(Plasmid_PPI_data, inputProteins < 1 & Plasmid_genes >0)
+# write.xlsx(Plasmid_PPI_data, "Plasmid_PPI_data_revised.xlsx")
+
+#################################################################
+########################################################################
+########### Examine aPMNLE for all proteins, not too useful ####### ####
+########################################################################
+
+# Full aPMNLE
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/")
+fullPMNLE <- data.frame(read.csv("Plasmid_PPI_data_PMNLE_corrected2.csv"))
+str(fullPMNLE) # 4377 obs. of  15 variables:
+        # X1, STRING.bacteria.name, aPMNLE, cThreshold, cTriangles, cEdges
+        # cVertices, cNonTrivialLoops, cConnectedComponents
+        # add plasmid_output into Final_Table where species match
+# fullPMNLE is not correct
+
+for (i in 1:length(fullPMNLE$STRING.bacteria.name)){
+  fullPMNLE$cTriangles[i] <- str_remove(fullPMNLE$cTriangles[i], "c\\(")
+  fullPMNLE$cTriangles[i] <- str_remove(fullPMNLE$cTriangles[i], "\\)")
+  fullPMNLE$cTri[i] <- as.numeric(tail(unlist(strsplit(fullPMNLE$cTriangles[i], ",")), n=1))
+} # Full aPMNLE
+
+for (i in 1:length(fullPMNLE$cNonTrivialLoops)){
+  fullPMNLE$cNonTrivialLoops[i] <- str_remove(fullPMNLE$cNonTrivialLoops[i], "c\\(")
+  fullPMNLE$cNonTrivialLoops[i] <- str_remove(fullPMNLE$cNonTrivialLoops[i], "\\)")
+  fullPMNLE$loops[i] <- as.numeric(tail(unlist(strsplit(fullPMNLE$cNonTrivialLoops[i], ",")), n=1))
+} # Full aPMNLE
+
+for (i in 1:length(fullPMNLE$cConnectedComponents)){
+  fullPMNLE$cConnectedComponents[i] <- str_remove(fullPMNLE$cConnectedComponents[i], "c\\(")
+  fullPMNLE$cConnectedComponents[i] <- str_remove(fullPMNLE$cConnectedComponents[i], "\\)")
+  fullPMNLE$ccs[i] <- as.numeric(tail(unlist(strsplit(fullPMNLE$cConnectedComponents[i], ",")), n=1))
+} # Full aPMNLE
+View(fullPMNLE) # Full aPMNLE
+
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/")
+fullPMNLE_new <- data.frame(read.csv("Plasmid_PPI_data_PMNLE_corrected2.csv"))
+str(fullPMNLE_new) # 4377 obs. of  15 variables:
+
+# check
+
+# Sample, Plasmid_PPI ...
+length(subset(fullPMNLE_new, Plasmid_PPI < 1)$Plasmid_PPI)
+# 1231 genes with 0 plasmid-related PPIs     
+# 3146 genes with 1+ plasmid-related PPIs
+summary(subset(fullPMNLE_new, Plasmid_PPI > 0)$Plasmid_PPI)
+#    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+  # 5981   28484   40368   47358   58903  373497 
+sd(subset(fullPMNLE_new, Plasmid_PPI > 0)$Plasmid_PPI)
+summary(subset(fullPMNLE_new, Plasmid_PPI > 0)$Chrom_PPI)
+ # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ #      1    1426    3244    5331    6716   60555 
+sd(subset(fullPMNLE_new, Plasmid_PPI > 0)$Chrom_PPI)
+summary(subset(fullPMNLE_new, Plasmid_PPI > 0)$Fraction)
+sd(subset(fullPMNLE_new, Plasmid_PPI > 0)$Fraction)
+
+png("FigS10_Triangles_distribution_full.png", width=500, height=600, units="px")
+hist(log10(as.numeric(fullPMNLE_new$cTri)), breaks=123, col="grey",
+     xlab="Log10-scaled numbers of all protein trios", main="", cex=1.2,
+     cex.axis=1.4) + grid()
+dev.off()
+png("FigS11_Loops_distribution_full.png", width=500, height=600, units="px")
+hist(log10(as.numeric(fullPMNLE_new$loops)), breaks=123, col="grey",
+     xlab="Log10-scaled numbers of all indirect connections", main="",
+     cex=1.2, cex.axis=1.4) + grid()
+dev.off()
+png("FigS12_Components_distribution_full.png", width=500, height=600, units="px")
+hist(log10(fullPMNLE_new$ccs), breaks=123, col="grey",
+     xlab="PPI network components - all genes", main="", cex=1.2,
+     cex.axis=1.4) + grid()
+dev.off()
+
+cor.test(as.numeric(fullPMNLE_new$loops), fullPMNLE_new$aPMNLE)[4]
+cor.test(as.numeric(fullPMNLE_new$loops), fullPMNLE_new$aPMNLE)[3]
+cor.test(as.numeric(fullPMNLE_new$loops), fullPMNLE_new$aPMNLE)$conf.int[1:2]
+# Loops: r=0.337 r2=0.114 raw p=2.568624e-113 95% CI 0.31 0.36 # p value 1
+pvalues <- c(2.568624e-113)
+
+cor.test(as.numeric(fullPMNLE_new$ccs), fullPMNLE_new$aPMNLE)[4]
+cor.test(as.numeric(fullPMNLE_new$ccs), fullPMNLE_new$aPMNLE)[3]
+cor.test(as.numeric(fullPMNLE_new$ccs), fullPMNLE_new$aPMNLE)$conf.int[1:2]
+# Connected Components: r=-0.191 r2=0.001 raw p=4.585766e-36 95% CI -0.22 -0.16
+pvalues <- c(4.585766e-36, pvalues) # p value 2
+
+
+########################################################################
+########### Examine chromosomal proteins' aPMNLE, again not useful # ####
+########################################################################
+
+# Chrom aPMNLE
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021")
+approximatePMNLE <- data.frame(read.xlsx("approximatePMNLE_Feb2022_v2.xlsx", sheetIndex=1))
+str(approximatePMNLE) # 4445 obs. of  5 variables:
+        # X1, STRING.bacteria.name, aPMNLE, cThreshold, cTriangles, cEdges
+        # cVertices, cNonTrivialLoops, cConnectedComponents
+        # add plasmid_output into Final_Table where species match
+
+for (i in 1:length(approximatePMNLE$STRING.bacteria.name)){
+  approximatePMNLE$cTriangles[i] <- str_remove(approximatePMNLE$cTriangles[i], "c\\(")
+  approximatePMNLE$cTriangles[i] <- str_remove(approximatePMNLE$cTriangles[i], "\\)")
+  approximatePMNLE$cTri[i] <- as.numeric(tail(unlist(strsplit(approximatePMNLE$cTriangles[i], ",")), n=1))
+} # Chrom aPMNLE
+
+for (i in 1:length(approximatePMNLE$cNonTrivialLoops)){
+  approximatePMNLE$cNonTrivialLoops[i] <- str_remove(approximatePMNLE$cNonTrivialLoops[i], "c\\(")
+  approximatePMNLE$cNonTrivialLoops[i] <- str_remove(approximatePMNLE$cNonTrivialLoops[i], "\\)")
+  approximatePMNLE$loops[i] <- as.numeric(tail(unlist(strsplit(approximatePMNLE$cNonTrivialLoops[i], ",")), n=1))
+} # Chrom aPMNLE
+
+for (i in 1:length(approximatePMNLE$cConnectedComponents)){
+  approximatePMNLE$cConnectedComponents[i] <- str_remove(approximatePMNLE$cConnectedComponents[i], "c\\(")
+  approximatePMNLE$cConnectedComponents[i] <- str_remove(approximatePMNLE$cConnectedComponents[i], "\\)")
+  approximatePMNLE$ccs[i] <- as.numeric(tail(unlist(strsplit(approximatePMNLE$cConnectedComponents[i], ",")), n=1))
+} # Chrom aPMNLE
+View(approximatePMNLE) # Chrom aPMNLE
+
+png("FigS10_Triangles_distribution_chrom.png", width=500, height=600, units="px")
+hist(log10(as.numeric(approximatePMNLE$cTri)), breaks=123, col="grey",
+     xlab="Log10-scaled numbers of chromosomal protein trios", main="", cex=1.2,
+     cex.axis=1.4) + grid()
+dev.off()
+png("FigS11_Loops_distribution_chrom.png", width=500, height=600, units="px")
+hist(log10(as.numeric(approximatePMNLE$loops)), breaks=123, col="grey",
+     xlab="Log10-scaled numbers of chromosomal indirect connections", main="",
+     cex=1.2, cex.axis=1.4) + grid()
+dev.off()
+png("FigS12_Components_distribution_chrom.png", width=500, height=600, units="px")
+hist(log10(approximatePMNLE$ccs), breaks=123, col="grey",
+     xlab="PPI network components - chromosomal genes", main="", cex=1.2,
+     cex.axis=1.4) + grid()
+dev.off()
+
+#################################################################
+# Chrom aPMNLE
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021")
+approximatePMNLE_all <- data.frame(read.xlsx("approximatePMNLE_all.xlsx", sheetIndex=1))
+str(approximatePMNLE_all) # 4422 obs. of  5 variables:
+# X1 ID	STRING.bacteria.name	aPMNLE	cThreshold	cTriangles	cEdges	cVertices
+# cNonTrivialLoops	cConnectedComponents
+        # add plasmid_output into Final_Table where species match
+
+for (i in 1:length(approximatePMNLE_all$STRING.bacteria.name)){
+  approximatePMNLE_all$cTriangles[i] <- str_remove(approximatePMNLE_all$cTriangles[i], "c\\(")
+  approximatePMNLE_all$cTriangles[i] <- str_remove(approximatePMNLE_all$cTriangles[i], "\\)")
+  approximatePMNLE_all$cTri[i] <- as.numeric(tail(unlist(strsplit(approximatePMNLE_all$cTriangles[i], ",")), n=1))
+} # All aPMNLE
+
+for (i in 1:length(approximatePMNLE_all$cNonTrivialLoops)){
+  approximatePMNLE_all$cNonTrivialLoops[i] <- str_remove(approximatePMNLE_all$cNonTrivialLoops[i], "c\\(")
+  approximatePMNLE_all$cNonTrivialLoops[i] <- str_remove(approximatePMNLE_all$cNonTrivialLoops[i], "\\)")
+  approximatePMNLE_all$loops[i] <- as.numeric(tail(unlist(strsplit(approximatePMNLE_all$cNonTrivialLoops[i], ",")), n=1))
+} # All aPMNLE
+
+for (i in 1:length(approximatePMNLE_all$cConnectedComponents)){
+  approximatePMNLE_all$cConnectedComponents[i] <- str_remove(approximatePMNLE_all$cConnectedComponents[i], "c\\(")
+  approximatePMNLE_all$cConnectedComponents[i] <- str_remove(approximatePMNLE_all$cConnectedComponents[i], "\\)")
+  approximatePMNLE_all$ccs[i] <- as.numeric(tail(unlist(strsplit(approximatePMNLE_all$cConnectedComponents[i], ",")), n=1))
+} # All aPMNLE
+View(approximatePMNLE_all) # All aPMNLE
+
+png("FigS10_Triangles_distribution_all.png", width=500, height=600, units="px")
+hist(log10(as.numeric(approximatePMNLE_all$cTri)), breaks=123, col="grey",
+     xlab="Log10-scaled numbers of all protein trios", main="", cex=1.2,
+     cex.axis=1.4) + grid()
+dev.off()
+png("FigS11_Loops_distribution_all.png", width=500, height=600, units="px")
+hist(log10(as.numeric(approximatePMNLE_all$loops)), breaks=123, col="grey",
+     xlab="Log10-scaled numbers of all indirect connections", main="",
+     cex=1.2, cex.axis=1.4) + grid()
+dev.off()
+png("FigS12_Components_distribution_all.png", width=500, height=600, units="px")
+hist(log10(approximatePMNLE_all$ccs), breaks=123, col="grey",
+     xlab="PPI network components - all genes", main="", cex=1.2,
+     cex.axis=1.4) + grid()
+dev.off()
+
+######
+
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021")
+# write.xlsx(approximatePMNLE, "approximatePMNLE_modified.xlsx")
+approximatePMNLE <- read.xlsx("approximatePMNLEmodified.xlsx")   # Chrom aPMNLE
+approximatePMNLE$cTri <- as.numeric(approximatePMNLE$cTri)
+str(approximatePMNLE)
+
+cor.test(as.numeric(approximatePMNLE$loops), approximatePMNLE$aPMNLE)[4]
+cor.test(as.numeric(approximatePMNLE$loops), approximatePMNLE$aPMNLE)[3]
+cor.test(as.numeric(approximatePMNLE$loops), approximatePMNLE$aPMNLE)$conf.int[1:2]
+# Loops: r=0.352 r2=0.124 raw p=1.53e-128 95% CI 0.33 0.38
+pvalues <- c(1.53e-12, pvalues) # p value 3
+
+cor.test(as.numeric(approximatePMNLE$ccs), approximatePMNLE$aPMNLE)[4]
+cor.test(as.numeric(approximatePMNLE$ccs), approximatePMNLE$aPMNLE)[3]
+cor.test(as.numeric(approximatePMNLE$ccs), approximatePMNLE$aPMNLE)$conf.int[1:2]
+# Connected Components: r=-0.200 r2=0.040 raw p=4.65e-41 95% CI -0.23 -0.17
+pvalues <- c(4.65e-41, pvalues) # p value 4
+
+########################################################################
+########### Compile final info from aPMNLEs for Table S3 ###############
+########################################################################
+
+Plasmid_PPI_data$aPMNLE <- rep(0, 4377)
+colnames(Plasmid_PPI_data)[8] <- c("aPMNLE") # chromosomal proteins
+Plasmid_PPI_data$cTri <- rep(0, 4377)
+colnames(Plasmid_PPI_data)[9] <- c("cTri")
+Plasmid_PPI_data$loops <- rep(0, 4377)
+colnames(Plasmid_PPI_data)[10] <- c("loops")
+Plasmid_PPI_data$ccs <- rep(0, 4377)
+colnames(Plasmid_PPI_data)[11] <- c("ccs")
+
+Plasmid_PPI_data$aPMNLE_all <- rep(0, 4377) # all proteins
+colnames(Plasmid_PPI_data)[12] <- c("aPMNLE_all")
+Plasmid_PPI_data$cTriPlasmid_PPI_data <- rep(0, 4377)
+colnames(Plasmid_PPI_data)[13] <- c("cTri_all")
+Plasmid_PPI_data$loopsPlasmid_PPI_data <- rep(0, 4377)
+colnames(Plasmid_PPI_data)[14] <- c("loops_all")
+Plasmid_PPI_data$ccsPlasmid_PPI_data <- rep(0, 4377)
+colnames(Plasmid_PPI_data)[15] <- c("ccs_all")
+
+Plasmid_PPI_data <- read.xlsx("Key_Results_Figures/Table_S3.xlsx")
+Plasmid_PPI_data$cTri <- as.numeric(Plasmid_PPI_data$cTri)
+Plasmid_PPI_data$cTri_all <- as.numeric(Plasmid_PPI_data$cTri_all)
+str(Plasmid_PPI_data)
+
+library(stringr)
+for (k in 1:length(Plasmid_PPI_data$Sample)){
+  print(k)
+  for (i in 1:length(approximatePMNLE$STRINGbacterianame)){ # 
+    Plasmid_PPI_data[k,]$Sample <- sub("\\_$", "", Plasmid_PPI_data[k,]$Sample) # remove trailing _  # "Escherichia_coli_O157_H7_str_EDL933"
+    
+    if(approximatePMNLE$STRINGbacterianame[i] == Plasmid_PPI_data[k,]$Sample){    
+       Plasmid_PPI_data[k,8] <- approximatePMNLE$aPMNLE[i]
+       Plasmid_PPI_data[k,9] <- approximatePMNLE$cTri[i]
+       Plasmid_PPI_data[k,10] <-approximatePMNLE$loops[i]
+       Plasmid_PPI_data[k,11] <-approximatePMNLE$ccs[i] } } } # end for
+
+Plasmid_PPI_data[Plasmid_PPI_data == 0] <- NA # add NA for any invalid values
+Plasmid_PPI_data$Plasmid_PPI[is.na(Plasmid_PPI_data$Plasmid_PPI)] <- 0  
+Plasmid_PPI_data$Fraction[is.na(Plasmid_PPI_data$Fraction)] <- 0  
+Plasmid_PPI_data$Plasmid_genes[is.na(Plasmid_PPI_data$Plasmid_genes)] <- 0  
+#subset(Plasmid_PPI_data, interactions==0 | is.na(interactions))
+#subset(Plasmid_PPI_data, inputProteins==0 | is.na(inputProteins))
+#subset(Plasmid_PPI_data, inputProteins==0 | is.na(inputProteins))
+
+View(Plasmid_PPI_data) # not pretty code but it works
+write.xlsx(Plasmid_PPI_data, "Key_Results_Figures/Table_S3.xlsx")
+
+for (k in 1:length(Plasmid_PPI_data$Sample)){
+  print(k)
+  for (i in 1:length(fullPMNLE$Sample)){
+    Plasmid_PPI_data[k,]$Sample <- sub("\\_$", "", Plasmid_PPI_data[k,]$Sample) # remove trailing _ 
+    if(fullPMNLE$Sample[i] == Plasmid_PPI_data[k,]$Sample){    
+       Plasmid_PPI_data[k,12] <- fullPMNLE$aPMNLE_all[i]
+       Plasmid_PPI_data[k,13] <- fullPMNLE$cTri_all[i]
+       Plasmid_PPI_data[k,14] <-fullPMNLE$loops_all[i]
+       Plasmid_PPI_data[k,15] <-fullPMNLE$ccs_all[i] } } # end for
+} # end for - two loops to avoid memory issues
+
+View(Plasmid_PPI_data) # not pretty code but it works
+write.xlsx(Plasmid_PPI_data, "Key_Results_Figures/Table_S3.xlsx")
+
+########################################################################
+########### Examine change in aPMNLE for chrom vs all, not useful # ####
+########################################################################
+
+# % fall in from full PNMLE to partial PMNLE
+Plasmid_PPI_data$diffPMNLE <-(Plasmid_PPI_data$aPMNLE_all - Plasmid_PPI_data$aPMNLE)/(Plasmid_PPI_data$aPMNLE_all) 
+hist(na.omit(Plasmid_PPI_data$diffPMNLE), breaks=123, col="grey", main="", 
+     xlab="Difference in PMNLE", cex=1.4, cex.axis=1.4,  cex.lab=1.4) + grid()
+summary(Plasmid_PPI_data$diffPMNLE)
+str(Plasmid_PPI_data$diffPMNLE) # 4422 - 126 samples = 4,398 samples
+#     Min.   1st Qu.    Median      Mean   3rd Qu.      Max.      NA's 
+# -0.152 -0.0092  0.000000  0.0155  0.026  0.76       136 
+subset(Plasmid_PPI_data, Plasmid_PPI_data$diffPMNLE > 0.5)[c(1:3,10:13)]
+
+png("Fig_S19_PMNLE_distribution_all.png", width=600, height=1200, units="px")
+par(mfrow=c(3,1))
+hist(Plasmid_PPI_data$aPMNLE_all, breaks=123, xlab="PMNLE values - all genes",
+     main="", cex=1.8, col="red", cex.axis=1.5, cex.lab=1.5, xlim=c(0,0.7)) + grid()
+hist(Plasmid_PPI_data$aPMNLE, breaks=123, xlab="PMNLE values - chromosomal genes",
+     main="", cex=1.8, col="blue", cex.axis=1.5, cex.lab=1.5, xlim=c(0,0.7)) + grid()
+hist(Plasmid_PPI_data$diffPMNLE, breaks=123, xlab="Change in PMNLE values",
+     main="", cex=1.8, col="green", cex.axis=1.5, cex.lab=1.5) + grid()
+dev.off()
+
+Plasmid_PPI_data <- read.xlsx("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/Key_Results_Figures/Table_S3.xlsx")
+dim(Plasmid_PPI_data) # 4,377
+# length(subset(fullPMNLE_new, Plasmid_PPI <1 | aPMNLE_all < 0.0001)$loops)
+
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/RMD_FILES")
+Plasmid_PPI_data_new <- read.xlsx("FinalTable.xlsx")
+str(Plasmid_PPI_data_new) # 4377 obs. of  7 variables
+
+Plasmid_PPI_dat2 <- subset(Plasmid_PPI_data, aPMNLE_all > 0.4 & Plasmid_PPI > 0)
+length(subset(Plasmid_PPI_data, Plasmid_PPI > 0)$Sample)# 3,146 samples
+length(subset(Plasmid_PPI_data, Plasmid_PPI == 0)$Sample)# 1,231 samples
+length(subset(Plasmid_PPI_data, aPMNLE_all > 0)$Sample)# 4,103 samples
+# 1,231 samples had no plasmid-related PPIs
+# A further 212 had no aPMNLE data
+dim(Plasmid_PPI_dat2) # 2,934 samples
+Plasmid_PPI_dat3 <- Plasmid_PPI_dat2
+dim(Plasmid_PPI_dat3)
+
+# Association of chrom PMNLE with numbers of plasmid-related PPIs
+plot(log10(Plasmid_PPI_dat2$Plasmid_PPI), Plasmid_PPI_dat2$aPMNLE) + grid()
+abline(lm(Plasmid_PPI_dat2$aPMNLE ~ log10(Plasmid_PPI_dat2$Plasmid_PPI)), col="red")
+cor(log10(Plasmid_PPI_dat2$Plasmid_PPI), Plasmid_PPI_dat2$aPMNLE)**2
+cor.test(log10(Plasmid_PPI_dat2$Plasmid_PPI), Plasmid_PPI_dat2$aPMNLE)[3]
+cor.test(log10(Plasmid_PPI_dat2$Plasmid_PPI), Plasmid_PPI_dat2$aPMNLE)$conf.int[1:2]
+# Plasmid_PPI r=0.50 r2=0.25 p=2.542212e-185 95% CI = 0.47 to 0.53
+pvalues <- c(2.542212e-185, pvalues) # p value 5
+
+# Association of full PMNLE with numbers of plasmid-related PPIs
+plot(log10(Plasmid_PPI_dat2$Plasmid_PPI), Plasmid_PPI_dat2$aPMNLE_all) + grid()
+abline(lm(Plasmid_PPI_dat2$aPMNLE_all ~ log10(Plasmid_PPI_dat2$Plasmid_PPI)), col="red")
+cor(log10(Plasmid_PPI_dat2$Plasmid_PPI), Plasmid_PPI_dat2$aPMNLE_all)
+cor.test(log10(Plasmid_PPI_dat2$Plasmid_PPI), Plasmid_PPI_dat2$aPMNLE_all)[3]
+cor.test(log10(Plasmid_PPI_dat2$Plasmid_PPI), Plasmid_PPI_dat2$aPMNLE_all)$conf.int[1:2]
+# Plasmid_PPI r=0.30 r2=0.09 p=2.542212e-185 95% CI = 0.26 to 0.33
+pvalues <- c(2.542212e-185, pvalues) # p value 6
+
+# Association of difference in PMNLE with numbers of plasmid-related PPIs
+plot(log10(Plasmid_PPI_dat3$Plasmid_PPI), Plasmid_PPI_dat3$diffPMNLE) + grid()
+abline(lm(Plasmid_PPI_dat3$diffPMNLE ~ log10(Plasmid_PPI_dat3$Plasmid_PPI)), col="red")
+cor(log10(Plasmid_PPI_dat3$Plasmid_PPI), Plasmid_PPI_dat3$diffPMNLE)
+cor.test(log10(Plasmid_PPI_dat3$Plasmid_PPI), Plasmid_PPI_dat3$diffPMNLE)[3]
+cor.test(log10(Plasmid_PPI_dat3$Plasmid_PPI), Plasmid_PPI_dat3$diffPMNLE)$conf.int[1:2]
+# Plasmid_PPI r=-0.411 r2=0.169 p=1.084262e-119 95% CI = -0.44 to -0.38
+pvalues <- c(1.084262e-119, pvalues) # p value 7
+
+########
+# Association of chrom PMNLE with numbers of chrom-related PPIs - weaker
+plot(log10(Plasmid_PPI_dat2$Chrom_PPI), Plasmid_PPI_dat2$aPMNLE) + grid()
+abline(lm(Plasmid_PPI_dat2$aPMNLE ~ log10(Plasmid_PPI_dat2$Chrom_PPI)), col="green")
+cor(log10(Plasmid_PPI_dat2$Chrom_PPI), Plasmid_PPI_dat2$aPMNLE)**2
+cor.test(Plasmid_PPI_dat2$Chrom_PPI, Plasmid_PPI_dat2$aPMNLE)[3]
+cor.test(Plasmid_PPI_dat2$Chrom_PPI, Plasmid_PPI_dat2$aPMNLE)$conf.int[1:2]
+# Chrom_PPI r=0.477 r2=0.229 p=9.165366e-49 95% CI = 0.23 to 0.30
+pvalues <- c(9.165366e-49, pvalues) # p value 8
+
+# Association of full PMNLE with numbers of all-related PPIs - weaker
+plot(log10(Plasmid_PPI_dat2$Chrom_PPI), Plasmid_PPI_dat2$aPMNLE_all) + grid()
+abline(lm(Plasmid_PPI_dat2$aPMNLE_all ~ log10(Plasmid_PPI_dat2$Chrom_PPI)), col="green")
+cor(log10(Plasmid_PPI_dat2$Chrom_PPI), Plasmid_PPI_dat2$aPMNLE_all)
+cor.test(Plasmid_PPI_dat2$Chrom_PPI, Plasmid_PPI_dat2$aPMNLE_all)[3]
+cor.test(Plasmid_PPI_dat2$Chrom_PPI, Plasmid_PPI_dat2$aPMNLE_all)$conf.int[1:2]
+# Chrom_PPI r=0.131 r2=0.02 p=9.132868e-11 95% CI = 0.08 to 0.15
+pvalues <- c(9.132868e-11, pvalues) # p value 9
+
+# Association of difference in PMNLE with numbers of chrom-related PPIs
+plot(log10(Plasmid_PPI_dat3$Chrom_PPI), Plasmid_PPI_dat3$diffPMNLE) + grid()
+abline(lm(Plasmid_PPI_dat3$diffPMNLE ~ log10(Plasmid_PPI_dat3$Chrom_PPI)), col="red")
+cor(log10(Plasmid_PPI_dat3$Chrom_PPI), Plasmid_PPI_dat3$diffPMNLE)**2
+cor.test(log10(Plasmid_PPI_dat3$Chrom_PPI), Plasmid_PPI_dat3$diffPMNLE)[3]
+cor.test(log10(Plasmid_PPI_dat3$Chrom_PPI), Plasmid_PPI_dat3$diffPMNLE)$conf.int[1:2]
+# Chrom_PPI r=-0.469 r2=0.220 p=2.877624e-160 95% CI = -0.50 to -0.44
+pvalues <- c(2.877624e-160, pvalues) # p value 10
+
+# ########
+# Key obvious finding
+# Association of chrom PMNLE with numbers of total PPIs
+plot(log10(Plasmid_PPI_dat2$interactions), Plasmid_PPI_dat2$aPMNLE) + grid()
+abline(lm(Plasmid_PPI_dat2$aPMNLE ~ log10(Plasmid_PPI_dat2$interactions)),col="red")
+cor(log10(Plasmid_PPI_dat2$interactions), Plasmid_PPI_dat2$aPMNLE)**2
+cor.test(log10(Plasmid_PPI_dat2$interactions), Plasmid_PPI_dat2$aPMNLE)[3]
+cor.test(log10(Plasmid_PPI_dat2$interactions), Plasmid_PPI_dat2$aPMNLE)$conf.int[1:2]
+# interactions r=0.51 r2=0.26 p=1.13266e-193 95% CI = 0.48 to 0.54
+pvalues <- c(1.13266e-193, pvalues) # p value 11
+
+# Association of full PMNLE with numbers of total PPIs
+plot(log10(Plasmid_PPI_dat2$interactions), Plasmid_PPI_dat2$aPMNLE_all) + grid()
+abline(lm(Plasmid_PPI_dat2$aPMNLE_all ~ log10(Plasmid_PPI_dat2$interactions)),col="red")
+cor(log10(Plasmid_PPI_dat2$interactions), Plasmid_PPI_dat2$aPMNLE_all)
+cor.test(log10(Plasmid_PPI_dat2$interactions), Plasmid_PPI_dat2$aPMNLE_all)[3]
+cor.test(log10(Plasmid_PPI_dat2$interactions), Plasmid_PPI_dat2$aPMNLE_all)$conf.int[1:2]
+# interactions r=0.28 r2=0.08 p=5.771313e-55 95% CI = 0.25 to 0.315
+pvalues <- c(5.771313e-55, pvalues) # p value 12
+
+# Association of difference in PMNLE with numbers of total PPIs
+plot(log10(Plasmid_PPI_dat3$interactions), Plasmid_PPI_dat3$diffPMNLE) + grid()
+abline(lm(Plasmid_PPI_dat3$diffPMNLE ~ log10(Plasmid_PPI_dat3$interactions)), col="red")
+cor(log10(Plasmid_PPI_dat3$interactions), Plasmid_PPI_dat3$diffPMNLE)
+cor.test(log10(Plasmid_PPI_dat3$interactions), Plasmid_PPI_dat3$diffPMNLE)[3]
+cor.test(log10(Plasmid_PPI_dat3$interactions), Plasmid_PPI_dat3$diffPMNLE)$conf.int[1:2]
+# interactions r=-0.43 r2=0.184 p=5.279136e-131 95% CI = -0.46 to -0.40
+pvalues <- c(5.279136e-131, pvalues) # p value 13
+# # ####
+
+#########################
+# plot to visualise number of PPIs vs chrom aPMNLE - not used
+rvalue <- sqrt(summary(lm((Plasmid_PPI_dat2$aPMNLE) ~
+                            log10(Plasmid_PPI_dat2$Plasmid_PPI)))$adj.r.squared)
+ppi_pmnle <- ggplot(Plasmid_PPI_dat2, aes(x=log10(Plasmid_PPI_dat2$interactions),
+                                   y=Plasmid_PPI_dat2$aPMNLE)) +
+  geom_point(color ="blue", size=0.3, shape=1, (aes(alpha=0.1)), show.legend=F) +
+  scale_x_continuous(name="Log10 of number of PPIs") +
+  scale_y_continuous(name="Chromosomal PMNLE indirect connections")  + 
+  geom_smooth(method='lm') +
+  annotation_custom(grobTree(textGrob(paste("For ",length(Plasmid_PPI_dat2$Sample),
+                                            " bacterial samples",sep=""),
+              x=0.6, y=.08, hjust=0, gp=gpar(col="black", fontsize=11)))) +
+  annotation_custom(grobTree(textGrob(paste("adj_r=", round(rvalue,3),sep=""),
+  x=0.7, y=.05, hjust=0, gp=gpar(col="black", fontsize=11)))) +
+  annotation_custom(grobTree(textGrob(paste("adj_r2=", round(rvalue**2,3),sep=""),
+  x=0.69, y=.02, hjust=0, gp=gpar(col="black", fontsize=11))))
+ppi_pmnle1 <- ggExtra::ggMarginal(ppi_pmnle, type="densigram", size=6,
+                                  colour="grey", bins=50)
+#pdf("Fig_S13_PPI_PMNLE_chrom.pdf", width=6, height=6, bg="white")
+ggarrange(ppi_pmnle1, ncol=1, nrow=1)
+#dev.off()
+
+#########################
+# plot to visualise number of PPIs vs all proteins aPMNLE - not used
+# ggplot it
+rvalue <- sqrt(summary(lm((Plasmid_PPI_dat2$aPMNLE_all) ~
+                            log10(Plasmid_PPI_dat2$Plasmid_PPI)))$adj.r.squared)
+ppi_pmnle2 <- ggplot(Plasmid_PPI_dat2, aes(x=log10(Plasmid_PPI_dat2$interactions),
+                                   y=Plasmid_PPI_dat2$aPMNLE_all)) +
+  geom_point(color ="blue", size=0.3, shape=1, (aes(alpha=0.1)), show.legend=F) +
+  scale_x_continuous(name="Log10 of number of PPIs") +
+  scale_y_continuous(name="Full PMNLE indirect connections")  + 
+  geom_smooth(method='lm') +
+  annotation_custom(grobTree(textGrob(paste("For ",length(Plasmid_PPI_dat2$Sample),
+                                            " bacterial samples",sep=""),
+              x=0.6, y=.08, hjust=0, gp=gpar(col="black", fontsize=11)))) +
+  annotation_custom(grobTree(textGrob(paste("adj_r=", round(rvalue,3),sep=""),
+  x=0.7, y=.05, hjust=0, gp=gpar(col="black", fontsize=11)))) +
+  annotation_custom(grobTree(textGrob(paste("adj_r2=", round(rvalue**2,3),sep=""),
+  x=0.69, y=.02, hjust=0, gp=gpar(col="black", fontsize=11))))
+ppi_pmnle12 <- ggExtra::ggMarginal(ppi_pmnle2, type="densigram", size=6,
+                                  colour="grey", bins=50)
+#pdf("Fig_5_PPI_PMNLE_all.pdf", width=6, height=6, bg="white")
+ggarrange(ppi_pmnle12, ncol=1, nrow=1)
+#dev.off()
+
+######################### Below was not published, not useful #########
+# plot to visualise number of PPIs vs change in aPMNLE - not used
+# difference in PMNLE
+# ggplot it
+rvalue <- sqrt(summary(lm((Plasmid_PPI_dat3$diffPMNLE) ~
+                            log10(Plasmid_PPI_dat3$Plasmid_PPI)))$adj.r.squared)
+ppi_pmnle3<- ggplot(Plasmid_PPI_dat3, aes(x=log10(Plasmid_PPI_dat3$interactions),
+                                   y=Plasmid_PPI_dat3$diffPMNLE)) +
+  geom_point(color ="blue", size=0.3, shape=1, (aes(alpha=0.1)), show.legend=F) +
+  scale_x_continuous(name="Log10 of number of PPIs") +
+  scale_y_continuous(name="Difference in PMNLE indirect connections")  + 
+  geom_smooth(method='lm') +
+  annotation_custom(grobTree(textGrob(paste("For ",length(Plasmid_PPI_dat3$Sample),
+                                            " bacterial samples",sep=""),
+              x=0.6, y=.08, hjust=0, gp=gpar(col="black", fontsize=11)))) +
+  annotation_custom(grobTree(textGrob(paste("adj_r=", round(rvalue,3),sep=""),
+  x=0.7, y=.05, hjust=0, gp=gpar(col="black", fontsize=11)))) +
+  annotation_custom(grobTree(textGrob(paste("adj_r2=", round(rvalue**2,3),sep=""),
+  x=0.69, y=.02, hjust=0, gp=gpar(col="black", fontsize=11))))
+ppi_pmnle13 <- ggExtra::ggMarginal(ppi_pmnle3, type="densigram", size=6,
+                                  colour="grey", bins=50)
+#pdf("Fig_5_PPI_PMNLE_diff.pdf", width=6, height=6, bg="white")
+ggarrange(ppi_pmnle13, ncol=1, nrow=1)
+#dev.off()
+
+###################
+# make ggplot of PPI, chrom_PPI, plasmid_PPI, proteins across:
+# full PMNLE, chrom PMNLE and difference in PMNLE
+
+r1 <- sqrt(summary(lm((Plasmid_PPI_dat2$aPMNLE) ~ log10(Plasmid_PPI_dat2$interactions)))$adj.r.squared)
+r2 <- sqrt(summary(lm((Plasmid_PPI_dat2$aPMNLE_all) ~ log10(Plasmid_PPI_dat2$interactions)))$adj.r.squared)
+r3 <- sqrt(summary(lm((Plasmid_PPI_dat3$diffPMNLE) ~ log10(Plasmid_PPI_dat3$interactions)))$adj.r.squared)
+
+figure5_a_1 <- ggplot(Plasmid_PPI_dat2, aes(x=log10(Plasmid_PPI_dat2$interactions),
+                                          y=Plasmid_PPI_dat2$aPMNLE_all)) +
+  geom_point(color ="black", size=0.1, shape=1, (aes(alpha=0.1)), show.legend=F) +
+  scale_x_continuous(name="Log10 of number of PPIs per sample") +
+  scale_y_continuous(name="aPMNLE (indirect connectivity)", limits =c(-0.1,0.7))  + 
+  geom_smooth(method='lm', col="black") + 
+  annotation_custom(grobTree(textGrob(paste("For ",length(Plasmid_PPI_dat2$Sample),
+    " bacterial samples",sep=""),x=0.6,y=.65,hjust=0, gp=gpar(col="black",fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Full PMNLE adj_r=", round(r2,3),sep=""),
+  x=0.6, y=.45, hjust=0, gp=gpar(col="black", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Full PMNLE adj_r2=", round(r2**2,3),sep=""),
+  x=0.6, y=.42, hjust=0, gp=gpar(col="black", fontsize=7))))  
+  
+figure5_a_2 <- figure5_a_1 + geom_point(data=Plasmid_PPI_dat2,
+        aes(x=log10(Plasmid_PPI_dat2$interactions), y=Plasmid_PPI_dat2$aPMNLE, alpha=0.1),
+             color ="red", size=0.1, shape=2, show.legend=F) + 
+  geom_smooth(data=Plasmid_PPI_dat2,
+        aes(x=log10(Plasmid_PPI_dat2$interactions), y=Plasmid_PPI_dat2$aPMNLE),
+        method='lm', col="red") +
+  annotation_custom(grobTree(textGrob(paste("Chrom PMNLE adj_r=", round(r1,3),sep=""),
+  x=0.6, y=.52, hjust=0, gp=gpar(col="red", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Chrom PMNLE adj_r2=", round(r1**2,3),sep=""),
+  x=0.6, y=.49, hjust=0, gp=gpar(col="red", fontsize=7)))) 
+
+figure5_a_3 <- figure5_a_2 + geom_point(data=Plasmid_PPI_dat3,
+    aes(x=log10(Plasmid_PPI_dat3$interactions), y=Plasmid_PPI_dat3$diffPMNLE, alpha=0.1),
+             color ="blue", size=0.1, shape=3, show.legend=F) + 
+  geom_smooth(data=Plasmid_PPI_dat3,
+    aes(x=log10(Plasmid_PPI_dat3$interactions), y=Plasmid_PPI_dat3$diffPMNLE),
+    method='lm', col="blue") +
+  annotation_custom(grobTree(textGrob(paste("Change in PMNLE adj_r=-", round(r3,3),sep=""),
+  x=0.6, y=.60, hjust=0, gp=gpar(col="blue", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Change in PMNLE adj_r2=", round(r3**2,3),sep=""),
+  x=0.6, y=.57, hjust=0, gp=gpar(col="blue", fontsize=7))))  + labs(tag="A")
+
+### Proteins
+r1p <- sqrt(summary(lm((Plasmid_PPI_dat2$aPMNLE) ~ log10(Plasmid_PPI_dat2$inputProteins)))$adj.r.squared)
+r2p <- sqrt(summary(lm((Plasmid_PPI_dat2$aPMNLE_all) ~ log10(Plasmid_PPI_dat2$inputProteins)))$adj.r.squared)
+r3p <- sqrt(summary(lm((Plasmid_PPI_dat3$diffPMNLE) ~ log10(Plasmid_PPI_dat3$inputProteins)))$adj.r.squared)
+
+figure5_b_1 <- ggplot(Plasmid_PPI_dat2, aes(x=log10(Plasmid_PPI_dat2$inputProteins),
+                                          y=Plasmid_PPI_dat2$aPMNLE_all)) +
+  geom_point(color ="black", size=0.1, shape=1, (aes(alpha=0.1)), show.legend=F) +
+  scale_x_continuous(name="Log10 of number of proteins per sample") +
+  scale_y_continuous(name="aPMNLE (indirect connectivity)", limits =c(-0.1,0.7))  + 
+  geom_smooth(method='lm', col="black") + 
+  annotation_custom(grobTree(textGrob(paste("For ",length(Plasmid_PPI_dat2$Sample),
+    " bacterial samples",sep=""),x=0.6,y=.65,hjust=0, gp=gpar(col="black",fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Full PMNLE adj_r=", round(r2p,3),sep=""),
+  x=0.6, y=.45, hjust=0, gp=gpar(col="black", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Full PMNLE adj_r2=", round(r2p**2,3),sep=""),
+  x=0.6, y=.42, hjust=0, gp=gpar(col="black", fontsize=7))))  
+  
+figure5_b_2 <- figure5_b_1 + geom_point(data=Plasmid_PPI_dat2,
+        aes(x=log10(Plasmid_PPI_dat2$inputProteins), y=Plasmid_PPI_dat2$aPMNLE, alpha=0.1),
+             color ="red", size=0.1, shape=2, show.legend=F) + 
+  geom_smooth(data=Plasmid_PPI_dat2,
+        aes(x=log10(Plasmid_PPI_dat2$inputProteins), y=Plasmid_PPI_dat2$aPMNLE),
+        method='lm', col="red") +
+  annotation_custom(grobTree(textGrob(paste("Chrom PMNLE adj_r=", round(r1p,3),sep=""),
+  x=0.6, y=.52, hjust=0, gp=gpar(col="red", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Chrom PMNLE adj_r2=", round(r1p**2,3),sep=""),
+  x=0.6, y=.49, hjust=0, gp=gpar(col="red", fontsize=7)))) 
+
+figure5_b_3 <- figure5_b_2 + geom_point(data=Plasmid_PPI_dat3,
+    aes(x=log10(Plasmid_PPI_dat3$inputProteins), y=Plasmid_PPI_dat3$diffPMNLE, alpha=0.1),
+             color ="blue", size=0.1, shape=3, show.legend=F) + 
+  geom_smooth(data=Plasmid_PPI_dat3,
+    aes(x=log10(Plasmid_PPI_dat3$inputProteins), y=Plasmid_PPI_dat3$diffPMNLE),
+    method='lm', col="blue") +
+  annotation_custom(grobTree(textGrob(paste("Change in PMNLE adj_r=-", round(r3p,3),sep=""),
+  x=0.6, y=.60, hjust=0, gp=gpar(col="blue", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Change in PMNLE adj_r2=", round(r3p**2,3),sep=""),
+  x=0.6, y=.57, hjust=0, gp=gpar(col="blue", fontsize=7)))) + labs(tag="B")
+
+### Chrom_PPI
+r1c <- sqrt(summary(lm((Plasmid_PPI_dat2$aPMNLE) ~ log10(Plasmid_PPI_dat2$Chrom_PPI)))$adj.r.squared)
+r2c <- sqrt(summary(lm((Plasmid_PPI_dat2$aPMNLE_all) ~ log10(Plasmid_PPI_dat2$Chrom_PPI)))$adj.r.squared)
+r3c <- sqrt(summary(lm((Plasmid_PPI_dat3$diffPMNLE) ~ log10(Plasmid_PPI_dat3$Chrom_PPI)))$adj.r.squared)
+
+figure5_c_1 <- ggplot(Plasmid_PPI_dat2, aes(x=log10(Plasmid_PPI_dat2$Chrom_PPI),
+                                          y=Plasmid_PPI_dat2$aPMNLE_all)) +
+  geom_point(color ="black", size=0.1, shape=1, (aes(alpha=0.1)), show.legend=F) +
+  scale_x_continuous(name="Log10 of number of chromosomal PPIs per sample") +
+  scale_y_continuous(name="aPMNLE (indirect connectivity)", limits =c(-0.1,0.7))  + 
+  geom_smooth(method='lm', col="black") + 
+  annotation_custom(grobTree(textGrob(paste("For ",length(Plasmid_PPI_dat2$Sample),
+    " bacterial samples",sep=""),x=0.01,y=.25,hjust=0, gp=gpar(col="black",fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Full PMNLE adj_r=", round(r2c,3),sep=""),
+  x=0.01, y=.05, hjust=0, gp=gpar(col="black", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Full PMNLE adj_r2=", round(r2c**2,3),sep=""),
+  x=0.01, y=.02, hjust=0, gp=gpar(col="black", fontsize=7))))  
+  
+figure5_c_2 <- figure5_c_1 + geom_point(data=Plasmid_PPI_dat2,
+        aes(x=log10(Plasmid_PPI_dat2$Chrom_PPI), y=Plasmid_PPI_dat2$aPMNLE, alpha=0.1),
+             color ="red", size=0.1, shape=2, show.legend=F) + 
+  geom_smooth(data=Plasmid_PPI_dat2,
+        aes(x=log10(Plasmid_PPI_dat2$Chrom_PPI), y=Plasmid_PPI_dat2$aPMNLE),
+        method='lm', col="red") +
+  annotation_custom(grobTree(textGrob(paste("Chrom PMNLE adj_r=", round(r1c,3),sep=""),
+  x=0.01, y=.12, hjust=0, gp=gpar(col="red", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Chrom PMNLE adj_r2=", round(r1c**2,3),sep=""),
+  x=0.01, y=.09, hjust=0, gp=gpar(col="red", fontsize=7)))) 
+
+figure5_c_3 <- figure5_c_2 + geom_point(data=Plasmid_PPI_dat3,
+    aes(x=log10(Plasmid_PPI_dat3$Chrom_PPI), y=Plasmid_PPI_dat3$diffPMNLE, alpha=0.1),
+             color ="blue", size=0.1, shape=3, show.legend=F) + 
+  geom_smooth(data=Plasmid_PPI_dat3,
+    aes(x=log10(Plasmid_PPI_dat3$Chrom_PPI), y=Plasmid_PPI_dat3$diffPMNLE),
+    method='lm', col="blue") +
+  annotation_custom(grobTree(textGrob(paste("Change in PMNLE adj_r=-", round(r3c,3),sep=""),
+  x=0.01, y=.20, hjust=0, gp=gpar(col="blue", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Change in PMNLE adj_r2=", round(r3c**2,3),sep=""),
+  x=0.01, y=.17, hjust=0, gp=gpar(col="blue", fontsize=7))))  + labs(tag="C")
+
+### Plasmid_PPI
+r1d <- sqrt(summary(lm((Plasmid_PPI_dat2$aPMNLE) ~ log10(Plasmid_PPI_dat2$Plasmid_PPI)))$adj.r.squared)
+r2d <- sqrt(summary(lm((Plasmid_PPI_dat2$aPMNLE_all) ~ log10(Plasmid_PPI_dat2$Plasmid_PPI)))$adj.r.squared)
+r3d <- sqrt(summary(lm((Plasmid_PPI_dat3$diffPMNLE) ~ log10(Plasmid_PPI_dat3$Plasmid_PPI)))$adj.r.squared)
+
+figure5_d_1 <- ggplot(Plasmid_PPI_dat2, aes(x=log10(Plasmid_PPI_dat2$Plasmid_PPI),
+                                          y=Plasmid_PPI_dat2$aPMNLE_all)) +
+  geom_point(color ="black", size=0.1, shape=1, (aes(alpha=0.1)), show.legend=F) +
+  scale_x_continuous(name="Log10 of number of plasmid PPIs per sample") +
+  scale_y_continuous(name="aPMNLE (indirect connectivity)", limits =c(-0.1,0.7))  + 
+  geom_smooth(method='lm', col="black") + 
+  annotation_custom(grobTree(textGrob(paste("For ",length(Plasmid_PPI_dat2$Sample),
+    " bacterial samples",sep=""),x=0.61,y=.65,hjust=0, gp=gpar(col="black",fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Full PMNLE adj_r=", round(r2d,3),sep=""),
+  x=0.6, y=.45, hjust=0, gp=gpar(col="black", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Full PMNLE adj_r2=", round(r2d**2,3),sep=""),
+  x=0.6, y=.42, hjust=0, gp=gpar(col="black", fontsize=7))))  
+  
+figure5_d_2 <- figure5_d_1 + geom_point(data=Plasmid_PPI_dat2,
+        aes(x=log10(Plasmid_PPI_dat2$Plasmid_PPI), y=Plasmid_PPI_dat2$aPMNLE, alpha=0.1),
+             color ="red", size=0.1, shape=2, show.legend=F) + 
+  geom_smooth(data=Plasmid_PPI_dat2,
+        aes(x=log10(Plasmid_PPI_dat2$Plasmid_PPI), y=Plasmid_PPI_dat2$aPMNLE),
+        method='lm', col="red") +
+  annotation_custom(grobTree(textGrob(paste("Chrom PMNLE adj_r=", round(r1d,3),sep=""),
+  x=0.6, y=.52, hjust=0, gp=gpar(col="red", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Chrom PMNLE adj_r2=", round(r1d**2,3),sep=""),
+  x=0.6, y=.49, hjust=0, gp=gpar(col="red", fontsize=7)))) 
+
+figure5_d_3 <- figure5_d_2 + geom_point(data=Plasmid_PPI_dat3,
+    aes(x=log10(Plasmid_PPI_dat3$Plasmid_PPI), y=Plasmid_PPI_dat3$diffPMNLE, alpha=0.1),
+             color ="blue", size=0.1, shape=3, show.legend=F) + 
+  geom_smooth(data=Plasmid_PPI_dat3,
+    aes(x=log10(Plasmid_PPI_dat3$Plasmid_PPI), y=Plasmid_PPI_dat3$diffPMNLE),
+    method='lm', col="blue") +
+  annotation_custom(grobTree(textGrob(paste("Change in PMNLE adj_r=-", round(r3d,3),sep=""),
+  x=0.6, y=.60, hjust=0, gp=gpar(col="blue", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Change in PMNLE adj_r2=", round(r3d**2,3),sep=""),
+  x=0.6, y=.57, hjust=0, gp=gpar(col="blue", fontsize=7)))) + labs(tag="D")
+
+#####
+figure5_a1 <- ggExtra::ggMarginal(figure5_a_3, type="densigram",
+                    size=5,colour="grey", bins=50)  
+figure5_b1 <- ggExtra::ggMarginal(figure5_b_3, type="densigram",
+                    size=5,colour="grey", bins=50)  
+figure5_c1 <- ggExtra::ggMarginal(figure5_c_3, type="densigram",
+                    size=5,colour="grey", bins=50)  
+figure5_d1 <- ggExtra::ggMarginal(figure5_d_3, type="densigram",
+                    size=5,colour="grey", bins=50)  
+par(mfrow=c(2,2))
+pdf("Fig_PMNLE.pdf", width=10, height=12, bg="white")
+ggarrange(figure5_a1, figure5_b1, figure5_c1, figure5_d1, ncol=2, nrow=2)
+dev.off()
+#png("Fig_5_PMNLE.png", width=2500, height=2600, units="px")
+#ggarrange(figure5_a1, figure5_b1, figure5_c1, figure5_d1, ncol=2, nrow=2)
+#dev.off()
+
+########################################################################
+########### Numbers of connections vs proteins & other metadata -> Fig_S21 ##
+########################################################################
+###################
+# make ggplot of PPI, chrom_PPI, plasmid_PPI, proteins across:
+# indirect connections
+
+Plasmid_PPI_dat3$Chrom_genes <- Plasmid_PPI_dat3$inputProteins - Plasmid_PPI_dat3$Plasmid_genes
+Plasmid_PPI_dat3$indirect_chrom <- Plasmid_PPI_dat3$loops/Plasmid_PPI_dat3$inputProteins
+Plasmid_PPI_dat3$indirect_all <- Plasmid_PPI_dat3$loops_all/Plasmid_PPI_dat3$inputProteins
+
+Plasmid_PPI_dat3$proteins_ccs_all = log10(Plasmid_PPI_dat3$inputProteins/Plasmid_PPI_dat3$ccs_all)
+Plasmid_PPI_dat3$proteins_ccs_chrom = log10(Plasmid_PPI_dat3$Chrom_genes/Plasmid_PPI_dat3$ccs)
+
+r1 <- sqrt(summary(lm((Plasmid_PPI_dat3$indirect_chrom) ~ log10(Plasmid_PPI_dat2$interactions)))$adj.r.squared)
+r2 <- sqrt(summary(lm((Plasmid_PPI_dat3$indirect_all) ~ log10(Plasmid_PPI_dat3$interactions)))$adj.r.squared)
+
+figure5_a_1 <- ggplot(Plasmid_PPI_dat3, aes(x=log10(Plasmid_PPI_dat3$interactions),
+                                          y=Plasmid_PPI_dat3$indirect_all)) +
+  geom_point(color ="black", size=0.1, shape=1, (aes(alpha=0.1)), show.legend=F) +
+  scale_x_continuous(name="Log10 of number of PPIs per sample") +
+  scale_y_continuous(name="Indirect connections per protein", limits =c(0,15))  + 
+  geom_smooth(method='lm', col="black") + 
+  annotation_custom(grobTree(textGrob(paste("For ",length(Plasmid_PPI_dat3$Sample),
+    " bacterial samples",sep=""),x=0.6,y=.16,hjust=0, gp=gpar(col="black",fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("All proteins adj_r=", round(r2,3),sep=""),
+  x=0.6, y=.14, hjust=0, gp=gpar(col="black", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("All proteins adj_r2=", round(r2**2,3),sep=""),
+  x=0.6, y=.12, hjust=0, gp=gpar(col="black", fontsize=7))))  
+  
+figure5_a_2 <- figure5_a_1 + geom_point(data=Plasmid_PPI_dat3,
+        aes(x=log10(Plasmid_PPI_dat3$interactions), y=Plasmid_PPI_dat3$indirect_chrom, alpha=0.1),
+             color ="red", size=0.1, shape=2, show.legend=F) + 
+  geom_smooth(data=Plasmid_PPI_dat3,
+        aes(x=log10(Plasmid_PPI_dat3$interactions), y=Plasmid_PPI_dat3$indirect_chrom),
+        method='lm', col="red") +
+  annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r=", round(r1,3),sep=""),
+  x=0.55, y=.10, hjust=0, gp=gpar(col="red", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r2=", round(r1**2,3),sep=""),
+  x=0.55, y=.08, hjust=0, gp=gpar(col="red", fontsize=7)))) 
+
+### Proteins
+r1p <- sqrt(summary(lm((Plasmid_PPI_dat3$indirect_chrom) ~ log10(Plasmid_PPI_dat2$inputProteins)))$adj.r.squared)
+r2p <- sqrt(summary(lm((Plasmid_PPI_dat3$indirect_all) ~ log10(Plasmid_PPI_dat2$inputProteins)))$adj.r.squared)
+
+figure5_b_1 <- ggplot(Plasmid_PPI_dat3, aes(x=log10(Plasmid_PPI_dat3$inputProteins),
+                                          y=Plasmid_PPI_dat3$indirect_all)) +
+  geom_point(color ="black", size=0.1, shape=1, (aes(alpha=0.1)), show.legend=F) +
+  scale_x_continuous(name="Log10 of number of proteins per sample") +
+  scale_y_continuous(name="Indirect connections per protein", limits =c(0,15))  + 
+  geom_smooth(method='lm', col="black") + 
+  annotation_custom(grobTree(textGrob(paste("For ",length(Plasmid_PPI_dat3$Sample),
+    " bacterial samples",sep=""),x=0.6,y=.12,hjust=0, gp=gpar(col="black",fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("All proteins adj_r=", round(r2p,3),sep=""),
+  x=0.6, y=.10, hjust=0, gp=gpar(col="black", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("All proteins adj_r2=", round(r2p**2,3),sep=""),
+  x=0.6, y=.08, hjust=0, gp=gpar(col="black", fontsize=7))))  
+  
+figure5_b_2 <- figure5_b_1 + geom_point(data=Plasmid_PPI_dat3,
+    aes(x=log10(Plasmid_PPI_dat3$inputProteins), y=Plasmid_PPI_dat3$indirect_chrom, alpha=0.1),
+             color ="red", size=0.1, shape=2, show.legend=F) + 
+  geom_smooth(data=Plasmid_PPI_dat3,
+        aes(x=log10(Plasmid_PPI_dat3$inputProteins), y=Plasmid_PPI_dat3$indirect_chrom),
+        method='lm', col="red") +
+  annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r=", round(r1p,3),sep=""),
+  x=0.02, y=.95, hjust=0, gp=gpar(col="red", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r2=", round(r1p**2,3),sep=""),
+  x=0.02, y=.93, hjust=0, gp=gpar(col="red", fontsize=7)))) 
+
+### Chrom_PPI -> Fig_S22.pdf
+r1c <- sqrt(summary(lm((Plasmid_PPI_dat3$indirect_chrom) ~ log10(Plasmid_PPI_dat3$Chrom_PPI)))$adj.r.squared)
+r2c <- sqrt(summary(lm((Plasmid_PPI_dat3$indirect_all) ~ log10(Plasmid_PPI_dat3$Chrom_PPI)))$adj.r.squared)
+
+figure5_c_1 <- ggplot(Plasmid_PPI_dat3, aes(x=log10(Plasmid_PPI_dat3$Chrom_PPI),
+                                          y=Plasmid_PPI_dat3$indirect_all)) +
+  geom_point(color ="black", size=0.1, shape=1, (aes(alpha=0.1)), show.legend=F) +
+  scale_x_continuous(name="Log10 of number of chromosomal PPIs per sample") +
+  scale_y_continuous(name="Indirect connections per protein", limits =c(0,15))  + 
+  geom_smooth(method='lm', col="black") + 
+  annotation_custom(grobTree(textGrob(paste("For ",length(Plasmid_PPI_dat3$Sample),
+    " bacterial samples",sep=""),x=0.01,y=.89,hjust=0, gp=gpar(col="black",fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("All proteins adj_r=", round(r2c,3),sep=""),
+  x=0.02, y=.87, hjust=0, gp=gpar(col="black", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("All proteins adj_r2=", round(r2c**2,3),sep=""),
+  x=0.02, y=.85, hjust=0, gp=gpar(col="black", fontsize=7))))  
+  
+figure5_c_2 <- figure5_c_1 + geom_point(data=Plasmid_PPI_dat3,
+        aes(x=log10(Plasmid_PPI_dat3$Chrom_PPI), y=Plasmid_PPI_dat3$indirect_chrom, alpha=0.1),
+             color ="red", size=0.1, shape=2, show.legend=F) + 
+  geom_smooth(data=Plasmid_PPI_dat3,
+        aes(x=log10(Plasmid_PPI_dat3$Chrom_PPI), y=Plasmid_PPI_dat3$indirect_chrom),
+        method='lm', col="red") +
+  annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r=", round(r1c,3),sep=""),
+  x=0.02, y=.83, hjust=0, gp=gpar(col="red", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r2=", round(r1c**2,3),sep=""),
+  x=0.02, y=.81, hjust=0, gp=gpar(col="red", fontsize=7)))) 
+
+### Plasmid_PPI
+r1d <- sqrt(summary(lm((Plasmid_PPI_dat3$indirect_chrom) ~ log10(Plasmid_PPI_dat3$Plasmid_PPI)))$adj.r.squared)
+r2d <- sqrt(summary(lm((Plasmid_PPI_dat3$indirect_all) ~ log10(Plasmid_PPI_dat3$Plasmid_PPI)))$adj.r.squared)
+
+figure5_d_1 <- ggplot(Plasmid_PPI_dat3, aes(x=log10(Plasmid_PPI_dat3$Plasmid_PPI),
+                                          y=Plasmid_PPI_dat3$indirect_all)) +
+  geom_point(color ="black", size=0.1, shape=1, (aes(alpha=0.1)), show.legend=F) +
+  scale_x_continuous(name="Log10 of number of plasmid PPIs per sample") +
+  scale_y_continuous(name="Indirect connections per protein", limits =c(0,15))  + 
+  geom_smooth(method='lm', col="black") + 
+  annotation_custom(grobTree(textGrob(paste("For ",length(Plasmid_PPI_dat3$Sample),
+    " bacterial samples",sep=""),x=0.61,y=.13,hjust=0, gp=gpar(col="black",fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("All proteins adj_r=", round(r2d,3),sep=""),
+  x=0.6, y=.11, hjust=0, gp=gpar(col="black", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("All proteins adj_r2=", round(r2d**2,3),sep=""),
+  x=0.6, y=.09, hjust=0, gp=gpar(col="black", fontsize=7))))  
+  
+figure5_d_2 <- figure5_d_1 + geom_point(data=Plasmid_PPI_dat3,
+        aes(x=log10(Plasmid_PPI_dat3$Plasmid_PPI), y=Plasmid_PPI_dat3$indirect_chrom, alpha=0.1),
+             color ="red", size=0.1, shape=2, show.legend=F) + 
+  geom_smooth(data=Plasmid_PPI_dat3,
+        aes(x=log10(Plasmid_PPI_dat3$Plasmid_PPI), y=Plasmid_PPI_dat3$indirect_chrom),
+        method='lm', col="red") +
+  annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r=", round(r1d,3),sep=""),
+  x=0.02, y=.93, hjust=0, gp=gpar(col="red", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r2=", round(r1d**2,3),sep=""),
+  x=0.02, y=.91, hjust=0, gp=gpar(col="red", fontsize=7)))) 
+
+#####
+figure5_a1 <- ggExtra::ggMarginal(figure5_a_2, type="densigram",
+                    size=5,colour="grey", bins=50)  
+figure5_b1 <- ggExtra::ggMarginal(figure5_b_2, type="densigram",
+                    size=5,colour="grey", bins=50)  
+figure5_c1 <- ggExtra::ggMarginal(figure5_c_2, type="densigram",
+                    size=5,colour="grey", bins=50)  
+figure5_d1 <- ggExtra::ggMarginal(figure5_d_2, type="densigram",
+                    size=5,colour="grey", bins=50)  
+par(mfrow=c(2,2))
+pdf("Fig_S21.pdf", width=10, height=12, bg="white")
+ggarrange(figure5_a1, figure5_b1, figure5_c1, figure5_d1, ncol=2, nrow=2)
+dev.off()
+
+########################################################################
+########### Numbers of connections vs proteins & other metadata -> Fig_S22 ##
+########################################################################
+
+Plasmid_PPI_dat3$proteins_ccs_all = log10(Plasmid_PPI_dat3$inputProteins/Plasmid_PPI_dat3$ccs_all)
+Plasmid_PPI_dat3$proteins_ccs_chrom = log10(Plasmid_PPI_dat3$Chrom_genes/Plasmid_PPI_dat3$ccs)
+Plasmid_PPI_dat3[mapply(is.infinite, Plasmid_PPI_dat3)] <- NA
+
+r1 <- sqrt(summary(lm((Plasmid_PPI_dat3$proteins_ccs_chrom) ~ log10(Plasmid_PPI_dat2$interactions)))$adj.r.squared)
+r2 <- sqrt(summary(lm((Plasmid_PPI_dat3$proteins_ccs_all) ~ log10(Plasmid_PPI_dat3$interactions)))$adj.r.squared)
+
+figure5_a_1 <- ggplot(Plasmid_PPI_dat3, aes(x=log10(Plasmid_PPI_dat3$interactions),
+                                          y=Plasmid_PPI_dat3$proteins_ccs_all)) +
+  geom_point(color ="black", size=0.1, shape=1, (aes(alpha=0.1)), show.legend=F) +
+  scale_x_continuous(name="Log10 of number of PPIs per sample") +
+  scale_y_continuous(name="Log10 of proteins per connected component", limits =c(1,3))  + 
+  geom_smooth(method='lm', col="black") + 
+  annotation_custom(grobTree(textGrob(paste("For ",length(Plasmid_PPI_dat3$Sample),
+    " bacterial samples",sep=""),x=0.6,y=.16,hjust=0, gp=gpar(col="black",fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("All proteins adj_r=", round(r2,3),sep=""),
+  x=0.6, y=.14, hjust=0, gp=gpar(col="black", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("All proteins adj_r2=", round(r2**2,3),sep=""),
+  x=0.6, y=.12, hjust=0, gp=gpar(col="black", fontsize=7))))  
+  
+figure5_a_2 <- figure5_a_1 + geom_point(data=Plasmid_PPI_dat3,
+        aes(x=log10(Plasmid_PPI_dat3$interactions), y=Plasmid_PPI_dat3$proteins_ccs_chrom, alpha=0.1),
+             color ="red", size=0.1, shape=2, show.legend=F) + 
+  geom_smooth(data=Plasmid_PPI_dat3,
+        aes(x=log10(Plasmid_PPI_dat3$interactions), y=Plasmid_PPI_dat3$proteins_ccs_chrom),
+        method='lm', col="red") +
+  annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r=", round(r1,3),sep=""),
+  x=0.55, y=.10, hjust=0, gp=gpar(col="red", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r2=", round(r1**2,3),sep=""),
+  x=0.55, y=.08, hjust=0, gp=gpar(col="red", fontsize=7)))) 
+
+### Proteins
+r1p <- sqrt(summary(lm((Plasmid_PPI_dat3$proteins_ccs_chrom) ~ log10(Plasmid_PPI_dat2$inputProteins)))$adj.r.squared)
+r2p <- sqrt(summary(lm((Plasmid_PPI_dat3$proteins_ccs_all) ~ log10(Plasmid_PPI_dat2$inputProteins)))$adj.r.squared)
+
+figure5_b_1 <- ggplot(Plasmid_PPI_dat3, aes(x=log10(Plasmid_PPI_dat3$inputProteins),
+                                          y=Plasmid_PPI_dat3$proteins_ccs_all)) +
+  geom_point(color ="black", size=0.1, shape=1, (aes(alpha=0.1)), show.legend=F) +
+  scale_x_continuous(name="Log10 of number of proteins per sample") +
+  scale_y_continuous(name="Log10 of proteins per connected component", limits =c(1,3))  + 
+  geom_smooth(method='lm', col="black") + 
+  annotation_custom(grobTree(textGrob(paste("For ",length(Plasmid_PPI_dat3$Sample),
+    " bacterial samples",sep=""),x=0.6,y=.12,hjust=0, gp=gpar(col="black",fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("All proteins adj_r=", round(0.00,3),sep=""),
+  x=0.6, y=.10, hjust=0, gp=gpar(col="black", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("All proteins adj_r2=", round(0.00,3),sep=""),
+  x=0.6, y=.08, hjust=0, gp=gpar(col="black", fontsize=7))))  
+  
+figure5_b_2 <- figure5_b_1 + geom_point(data=Plasmid_PPI_dat3,
+    aes(x=log10(Plasmid_PPI_dat3$inputProteins), y=Plasmid_PPI_dat3$proteins_ccs_chrom, alpha=0.1),
+             color ="red", size=0.1, shape=2, show.legend=F) + 
+  geom_smooth(data=Plasmid_PPI_dat3,
+        aes(x=log10(Plasmid_PPI_dat3$inputProteins), y=Plasmid_PPI_dat3$proteins_ccs_chrom),
+        method='lm', col="red") +
+  annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r=", round(r1p,3),sep=""),
+  x=0.02, y=.95, hjust=0, gp=gpar(col="red", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r2=", round(r1p**2,3),sep=""),
+  x=0.02, y=.93, hjust=0, gp=gpar(col="red", fontsize=7)))) 
+
+### Chrom_PPI
+r1c <- sqrt(summary(lm((Plasmid_PPI_dat3$proteins_ccs_chrom) ~ log10(Plasmid_PPI_dat3$Chrom_PPI)))$adj.r.squared)
+r2c <- sqrt(summary(lm((Plasmid_PPI_dat3$proteins_ccs_all) ~ log10(Plasmid_PPI_dat3$Chrom_PPI)))$adj.r.squared)
+
+figure5_c_1 <- ggplot(Plasmid_PPI_dat3, aes(x=log10(Plasmid_PPI_dat3$Chrom_PPI),
+                                          y=Plasmid_PPI_dat3$proteins_ccs_all)) +
+  geom_point(color ="black", size=0.1, shape=1, (aes(alpha=0.1)), show.legend=F) +
+  scale_x_continuous(name="Log10 of number of chromosomal PPIs per sample") +
+  scale_y_continuous(name="Log10 of proteins per connected component", limits =c(1,3))  + 
+  geom_smooth(method='lm', col="black") + 
+  annotation_custom(grobTree(textGrob(paste("For ",length(Plasmid_PPI_dat3$Sample),
+    " bacterial samples",sep=""),x=0.01,y=.89,hjust=0, gp=gpar(col="black",fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("All proteins adj_r=", round(r2c,3),sep=""),
+  x=0.02, y=.87, hjust=0, gp=gpar(col="black", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("All proteins adj_r2=", round(r2c**2,3),sep=""),
+  x=0.02, y=.85, hjust=0, gp=gpar(col="black", fontsize=7))))  
+  
+figure5_c_2 <- figure5_c_1 + geom_point(data=Plasmid_PPI_dat3,
+        aes(x=log10(Plasmid_PPI_dat3$Chrom_PPI), y=Plasmid_PPI_dat3$proteins_ccs_chrom, alpha=0.1),
+             color ="red", size=0.1, shape=2, show.legend=F) + 
+  geom_smooth(data=Plasmid_PPI_dat3,
+        aes(x=log10(Plasmid_PPI_dat3$Chrom_PPI), y=Plasmid_PPI_dat3$proteins_ccs_chrom),
+        method='lm', col="red") +
+  annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r=", round(r1c,3),sep=""),
+  x=0.02, y=.83, hjust=0, gp=gpar(col="red", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r2=", round(r1c**2,3),sep=""),
+  x=0.02, y=.81, hjust=0, gp=gpar(col="red", fontsize=7)))) 
+
+### Plasmid_PPI
+r1d <- sqrt(summary(lm((Plasmid_PPI_dat3$proteins_ccs_chrom) ~ log10(Plasmid_PPI_dat3$Plasmid_PPI)))$adj.r.squared)
+r2d <- sqrt(summary(lm((Plasmid_PPI_dat3$proteins_ccs_all) ~ log10(Plasmid_PPI_dat3$Plasmid_PPI)))$adj.r.squared)
+
+figure5_d_1 <- ggplot(Plasmid_PPI_dat3, aes(x=log10(Plasmid_PPI_dat3$Plasmid_PPI),
+                                          y=Plasmid_PPI_dat3$proteins_ccs_all)) +
+  geom_point(color ="black", size=0.1, shape=1, (aes(alpha=0.1)), show.legend=F) +
+  scale_x_continuous(name="Log10 of number of plasmid PPIs per sample") +
+  scale_y_continuous(name="Proteins per connected component", limits =c(1,3.5))  + 
+  geom_smooth(method='lm', col="black") + 
+  annotation_custom(grobTree(textGrob(paste("For ",length(Plasmid_PPI_dat3$Sample),
+    " bacterial samples",sep=""),x=0.61,y=.13,hjust=0, gp=gpar(col="black",fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("All proteins adj_r=", round(r2d,3),sep=""),
+  x=0.6, y=.11, hjust=0, gp=gpar(col="black", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("All proteins adj_r2=", round(r2d**2,3),sep=""),
+  x=0.6, y=.09, hjust=0, gp=gpar(col="black", fontsize=7))))  
+  
+figure5_d_2 <- figure5_d_1 + geom_point(data=Plasmid_PPI_dat3,
+        aes(x=log10(Plasmid_PPI_dat3$Plasmid_PPI), y=Plasmid_PPI_dat3$proteins_ccs_chrom, alpha=0.1),
+             color ="red", size=0.1, shape=2, show.legend=F) + 
+  geom_smooth(data=Plasmid_PPI_dat3,
+        aes(x=log10(Plasmid_PPI_dat3$Plasmid_PPI), y=Plasmid_PPI_dat3$proteins_ccs_chrom),
+        method='lm', col="red") +
+  annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r=", round(r1d,3),sep=""),
+  x=0.02, y=.93, hjust=0, gp=gpar(col="red", fontsize=7)))) +
+  annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r2=", round(r1d**2,3),sep=""),
+  x=0.02, y=.91, hjust=0, gp=gpar(col="red", fontsize=7)))) 
+
+#####
+figure5_a1 <- ggExtra::ggMarginal(figure5_a_2, type="densigram",
+                    size=5,colour="grey", bins=50)  
+figure5_b1 <- ggExtra::ggMarginal(figure5_b_2, type="densigram",
+                    size=5,colour="grey", bins=50)  
+figure5_c1 <- ggExtra::ggMarginal(figure5_c_2, type="densigram",
+                    size=5,colour="grey", bins=50)  
+figure5_d1 <- ggExtra::ggMarginal(figure5_d_2, type="densigram",
+                    size=5,colour="grey", bins=50)  
+par(mfrow=c(2,2))
+pdf("Fig_S22.pdf", width=10, height=12, bg="white")
+ggarrange(figure5_a1, figure5_b1, figure5_c1, figure5_d1, ncol=2, nrow=2)
+dev.off()
+#png("Fig_5_PMNLE.png", width=2500, height=2600, units="px")
+#ggarrange(figure5_a1, figure5_b1, figure5_c1, figure5_d1, ncol=2, nrow=2)
+#dev.off()
+
+
+###################
+# Association of chrom PMNLE with numbers of input proteins is present 
+plot(log10(Plasmid_PPI_dat2$inputProteins), Plasmid_PPI_dat2$aPMNLE) + grid()
+abline(lm(Plasmid_PPI_dat2$aPMNLE ~ log10(Plasmid_PPI_dat2$inputProteins)),col="green")
+cor(log10(Plasmid_PPI_dat2$inputProteins), Plasmid_PPI_dat2$aPMNLE)
+cor.test(Plasmid_PPI_dat2$inputProteins, Plasmid_PPI_dat2$aPMNLE)[3]
+cor.test(Plasmid_PPI_dat2$inputProteins, Plasmid_PPI_dat2$aPMNLE)$conf.int[1:2]
+# inputProteins r=0.42 r2=0.18 p=2.505911e-75 95% CI = 0.30 to 0.36
+pvalues <- c(2.505911e-75, pvalues) # p value 14
+
+plot(log10(Plasmid_PPI_dat2$inputProteins), Plasmid_PPI_dat2$aPMNLE_all) + grid()
+abline(lm(Plasmid_PPI_dat2$aPMNLE_all ~ log10(Plasmid_PPI_dat2$inputProteins)),col="green")
+cor(log10(Plasmid_PPI_dat2$inputProteins), Plasmid_PPI_dat2$aPMNLE_all)**2
+cor.test(Plasmid_PPI_dat2$inputProteins, Plasmid_PPI_dat2$aPMNLE_all)[3]
+cor.test(Plasmid_PPI_dat2$inputProteins, Plasmid_PPI_dat2$aPMNLE_all)$conf.int[1:2]
+# inputProteins r=0.216 r2=0.05 p=6.181867e-24 95% CI = 0.15 to 0.22
+pvalues <- c(6.181867e-24, pvalues) # p value 15
+
+plot(log10(Plasmid_PPI_dat3$inputProteins), Plasmid_PPI_dat3$diffPMNLE) + grid()
+abline(lm(Plasmid_PPI_dat3$diffPMNLE ~ log10(Plasmid_PPI_dat3$inputProteins)),col="green")
+cor(log10(Plasmid_PPI_dat3$inputProteins), Plasmid_PPI_dat3$diffPMNLE)
+cor.test(Plasmid_PPI_dat3$inputProteins, Plasmid_PPI_dat3$diffPMNLE)[3]
+cor.test(Plasmid_PPI_dat3$inputProteins, Plasmid_PPI_dat3$diffPMNLE)$conf.int[1:2]
+# inputProteins r=-0.365 r2=0.13 p=1.421257e-51 95% CI = -0.31 to -0.24
+pvalues <- c(1.421257e-51, pvalues) # p value 16
+###################
+#################################################################
+
+########################################################################
+########### Change in aPMNLE, not useful ###############################
+########################################################################
+########## % fall in from full PNMLE to partial PMNLE
+par(mfrow=c(1,1))
+Plasmid_PPI_dat3 <- Plasmid_PPI_dat2
+Plasmid_PPI_dat3$diffPMNLE <-(Plasmid_PPI_dat3$aPMNLE_all -
+                                Plasmid_PPI_dat3$aPMNLE)/(Plasmid_PPI_dat3$aPMNLE_all) 
+hist(Plasmid_PPI_dat3$diffPMNLE, breaks=123, col="grey", main="", 
+     xlab="Difference in PMNLE", cex=1.4, cex.axis=1.4,  cex.lab=1.4) + grid()
+summary(Plasmid_PPI_dat3$diffPMNLE)
+sd(Plasmid_PPI_dat3$diffPMNLE) # SD = 0.0704
+#     Min.   1st Qu.    Median      Mean  3rd Qu.  Max 
+#     -0.152   -0.0189    0.007    0.022  0.046  0.763 
+ subset(Plasmid_PPI_dat3, diffPMNLE > 0.5)[c(1:3,10:13)]
+
+str(Plasmid_PPI_dat3)  # 2975 obs. of  16 variables:
+t3 <- subset(Plasmid_PPI_dat3, diffPMNLE >  2*sd(Plasmid_PPI_dat3$diffPMNLE) )
+# Top 5% of difference in aPMNLE where plasmid has big effect -> lower connectivity
+dim(t3) # 155 samples
+View(t3[,c(1:8,12,16)] %>%  mutate_if(is.numeric, round, digits=3))
+write.xlsx(t3, "Table_S4.xlsx")
+
+t4 <- subset(Plasmid_PPI_dat3, diffPMNLE < -2*sd(Plasmid_PPI_dat3$diffPMNLE) )
+# Top 5% of difference in aPMNLE where plasmid has big effect -> more connections
+dim(t4) # 3 samples
+View(t4[,c(1:8,12,16)] %>%  mutate_if(is.numeric, round, digits=3))
+
+main_set1 <-  Plasmid_PPI_dat3[ !(Plasmid_PPI_dat3$Sample %in% t3$Sample), ]
+main_set2 <-  main_set1[ !(main_set1$Sample %in% t4$Sample), ]
+dim(Plasmid_PPI_dat3)
+dim(main_set2) # 2881
+
+# compare groups' features
+par(mfrow=c(5,3))
+pdf("mainset_v_155.pdf", width=6, height=6, bg="white")
+p_set <- c()
+t_set <- c()
+for (i in 2:16){
+   t3[,i] <- as.numeric(t3[,i])
+   ttt <- t.test(as.numeric(t3[,i]), as.numeric(main_set2[,i]))
+   print(hist(as.numeric(main_set2[,i]), col=alpha("blue", 0.4), breaks=65,
+              xlab=colnames(t3)[i], main=""))
+   print(grid())
+   print(hist(as.numeric(t3[,i]), col=alpha("red", 0.4) , breaks=65, add=T)) 
+   p_set <- c(p_set, ttt$p.value)
+   t_set <- c(t_set, ttt$statistic)
+} # end for -> 11 items
+dev.off()
+
+# dim(main_set2)
+output1 <- matrix(nrow=4, ncol=15)
+colnames(output1) <- colnames(main_set2)[2:16]
+output1[1,] <- (t_set)
+output1[2,] <- p.adjust(p_set, method="BH")
+output1[3,] <- colMeans(main_set2[2:16])
+output1[4,] <- colMeans(t3[2:16])
+rownames(output1) <- c("t_stat", "adj_p", "main", "new")
+View(t(output1))
+
+# compare 
+all_ccs <- subset(main_set2, ccs_all>0 & ccs>0)
+mean((all_ccs$ccs_all - all_ccs$ccs)/all_ccs$ccs_all)
+# 91.74% difference
+t3_ccs <- subset(t3, ccs_all>0 & ccs>0)
+mean((t3_ccs$ccs_all - t3_ccs$ccs)/t3_ccs$ccs_all)
+# 329.3% difference
+# 
+
+# Although most showed statistically extreme differences between the 155 and
+# the main group, these were artefactual and not real (see plots). The key one
+# was the change from the aPMLNE for all proteins compared to chromosomal ones
+# only (see below).
+
+# compare groups' features
+par(mfrow=c(3,1))
+pdf("mainset_v_155.2.pdf", width=6, height=6, bg="white")
+hist(as.numeric(main_set2[,8]), col=alpha("blue", 0.4), breaks=65,
+              xlab="aPMNLE values for all proteins", main="") + grid()
+hist(as.numeric(t3[,8]), col=alpha("red", 0.4), breaks=65, add=T)
+hist(as.numeric(main_set2[,12]), col=alpha("blue", 0.4), breaks=65,
+       xlab="aPMNLE values for chromosomal proteins", main="") + grid()
+hist(as.numeric(t3[,12]), col=alpha("red", 0.4), breaks=65, add=T)
+hist(as.numeric(main_set2[,16]), col=alpha("blue", 0.4), breaks=65,
+              xlab="Difference in aPMNLE values", main="") + grid()
+hist(as.numeric(t3[,16]), col=alpha("red", 0.4), breaks=65, add=T)
+dev.off()
+
+par(mfrow=c(1,1))
+pdf("Figure_S20.pdf", width=6, height=6, bg="white")
+plot(as.numeric(main_set2[,12]), as.numeric(main_set2[,8]), col=alpha("blue",
+      0.4), cex=0.2, ylab="aPMNLE values for chromosomal proteins", main="",
+      xlab="aPMNLE values for all proteins", xlim=c(0.4,0.65), ylim=c(0.1,0.7))
+points(as.numeric(t3[,12]), as.numeric(t3[,8]), col=alpha("red",
+      0.6), cex=0.2) + grid()
+abline(lm(main_set2$aPMNLE ~ main_set2$aPMNLE_all), col=alpha("blue",
+      0.4), lty="dotted")
+abline(lm(t3$aPMNLE ~ t3$aPMNLE_all), col=alpha("red",
+      0.4), lty="dotted")
+text(0.466,0.68, paste0("For the main set of ",length(main_set2$Sample)," samples",
+                      sep=""), col=alpha("blue",0.7))
+text(0.466,0.64, paste0("r=", round(cor(main_set2$aPMNLE, main_set2$aPMNLE_all),3),
+    " and r2=", round(cor(main_set2$aPMNLE, main_set2$aPMNLE_all)**2,3), sep=""),
+     col=alpha("blue",0.7))
+text(0.466,0.18, paste0("For the smaller set of ",length(t3$Sample)," samples",
+                      sep=""), col=alpha("red",0.7))
+text(0.466,0.14, paste0("r=", round(cor(t3$aPMNLE, t3$aPMNLE_all),3), " and r2=", round(cor(t3$aPMNLE, t3$aPMNLE_all)**2,3), sep=""), col=alpha("red",0.7))
+ dev.off()
+
+# Examine metrics for whole group first
+str(Plasmid_PPI_dat3)
+Plasmid_PPI_dat3$Chrom_genes <-Plasmid_PPI_dat3$inputProteins - Plasmid_PPI_dat3$Plasmid_genes
+# Examine indirect loops for all
+par(mfrow=c(1,1))
+pdf("Figure_S14.pdf", width=7, height=7, bg="white")
+xx = Plasmid_PPI_dat3$loops_all/Plasmid_PPI_dat3$inputProteins
+yy = Plasmid_PPI_dat3$loops/Plasmid_PPI_dat3$Chrom_genes
+plot(xx, yy, col=alpha("blue", 0.4), cex=0.2, main="", xlab="All: Indirect PPIs per protein",
+    ylab="Chromosomal: Indirect PPIs per protein", ylim=c(0,40), cex.lab=1.2,
+    cex.axis=1.2) + grid()
+abline(lm(yy ~ xx), col=alpha("blue", 0.6), lty="dotted")
+abline(coef = c(0,1), col=alpha("red", 0.6), lty="dotted")
+legend(0.1, 40, legend=c("Expected rate", "Observed rate"),
+       col=c("red", "blue"), lty="dotted", cex=1.1)
+text(27,2, "Samples with more indirect PPIs when",
+     col=alpha("black",0.7), cex=1.1)
+text(27,0.8, "plasmid-related proteins are included",
+     col=alpha("black",0.7), cex=1.1)
+text(14,33, "Samples with more indirect PPIs when",
+     col=alpha("black",0.7), cex=1.1)
+text(14,31.8, "plasmid-related proteins are excluded",
+     col=alpha("black",0.7), cex=1.1)
+dev.off()
+
+xx = Plasmid_PPI_dat3$loops_all/Plasmid_PPI_dat3$inputProteins
+yy = Plasmid_PPI_dat3$loops/Plasmid_PPI_dat3$Chrom_genes
+pdf("Figure_6.pdf", width=13, height=7, bg="white")
+#png(file="Figure_6.png", width=1045, height=495, units="px")
+par(mfrow=c(1,2))
+plot(xx, yy, col=alpha("blue", 0.4), cex=0.2, main="",
+     xlab="All: Indirect connections per protein",
+    ylab="Chromosomal: Indirect connections per protein", ylim=c(0,12), cex.lab=1.2,
+    cex.axis=1.2, xlim=c(0,16)) + grid()
+abline(lm(yy ~ xx), col=alpha("blue", 1), lty="dashed")
+abline(coef = c(0,1), col=alpha("red", 1), lty="dashed")
+legend(0.1, 12, legend=c("Expected rate", "Observed rate"),
+       col=c("red", "blue"), lty="dashed", cex=1.2)
+text(12.6,1, "Samples with more indirect", col=alpha("black",0.7), cex=1.1)
+text(12,0.5, "connections when plasmid-related", col=alpha("black",0.7), cex=1.1)
+text(12.6,0.01, "proteins are included", col=alpha("black",0.7), cex=1.1)
+text(4.0,9.6, "Samples with more indirect", col=alpha("black",0.7), cex=1.1)
+text(4.5,9.2, "connections when plasmid-related", col=alpha("black",0.7), cex=1.1)
+text(4.0,8.8, "proteins are excluded", col=alpha("black",0.7), cex=1.1)
+
+##
+xx2 = log10(Plasmid_PPI_dat3$inputProteins/Plasmid_PPI_dat3$ccs_all)
+yy2 = log10(Plasmid_PPI_dat3$Chrom_genes/Plasmid_PPI_dat3$ccs)
+temp2 <- (na.omit(data.frame(xx2,yy2)))
+temp2[mapply(is.infinite, temp2)] <- NA
+plot(xx2, yy2, col=alpha("darkgreen", 0.4), cex=0.2, main="", cex.lab=1.2, 
+     xlab="All: log10-scaled proteins per connected component", cex.axis=1.2,
+     ylab="Chromosomal: log10-scaled proteins per connected components",
+     xlim=c(1,3.5), ylim=c(1,3)) + grid()
+abline(lm(temp2$yy2 ~ temp2$xx2), col=alpha("darkgreen", 1), lty="dashed")
+abline(coef = c(0,1), col=alpha("red", 1), lty="dashed")
+legend(0.94,3.01, legend=c("Expected rate", "Observed rate"),
+       col=c("red", "darkgreen"), lty="dashed", cex=1.2)
+text(2.87,1.11, "Samples with fewer connected", col=alpha("black",0.7), cex=1.1)
+text(2.7,1.05, "components when plasmid-related", col=alpha("black",0.7), cex=1.1)
+text(2.87,0.99, "proteins are included", col=alpha("black",0.7), cex=1.1)
+text(1.6,2.6, "Samples with more connected", col=alpha("black",0.7), cex=1.1)
+text(1.7,2.54, "components when plasmid-related", col=alpha("black",0.7), cex=1.1)
+text(1.6,2.48, "proteins are excluded", col=alpha("black",0.7), cex=1.1)
+dev.off()
+
+summary(xx) # indirect connections
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#  0.000   6.83   7.80   8.09   8.97  40.334 
+sd(xx) # mean=8.09 +- 2.32
+ summary(yy)
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+# 0.1463  3.3850  4.4268  4.6835  5.6801 30.6443 
+sd(yy) # mean = 4.68 +- 2.18
+t.test(xx,yy) # big difference no shit
+mean(xx)/mean(yy)
+
+xx2 <- xx2[!is.na(xx2) & !is.infinite(xx2)]
+summary(10^xx2) # indirect connections
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#   9.525   98.915  143.742  179.066  210.750 4127.000 
+sd(10^xx2) # mean=179.1 +- 160.94
+yy2 <- yy2[!is.na(yy2) & !is.infinite(yy2)]
+summary(10^yy2)
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#  3.68   45.13   69.22   78.35  100.86  514.
+sd(10^yy2) # mean = 78.4 +- 49.6
+t.test(10^xx2,10^yy2) # big difference no shit
+mean(10^xx2)/mean(10^yy2)
+
+################### 
+########################################################################
+########### aPMNLE and indirect connections ###############################
+########################################################################
+###################
+
+# numerical data for StringDB threshold = 400
+# Loops
+Plasmid_PPI_dat3$diffLoops <-(Plasmid_PPI_dat3$loops_all -
+                        Plasmid_PPI_dat3$loops)/(Plasmid_PPI_dat3$loops_all) 
+hist(Plasmid_PPI_dat3$diffLoops, breaks=123, col="grey", main="", cex.axis=1.4,
+     xlab="Difference in numbers of loops", cex=1.4,  cex.lab=1.4) + grid()
+summary(Plasmid_PPI_dat3$diffLoops)
+sd(Plasmid_PPI_dat3$diffLoops) # SD = 0.170
+#     Min.   1st Qu.    Median      Mean   3rd Qu.      Max.      NA's 
+#  0.008857 0.401626 0.510176 0.518688 0.629475 0.998985
+
+plot(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffLoops) + grid()
+abline(lm(Plasmid_PPI_dat3$diffLoops ~ Plasmid_PPI_dat3$diffPMNLE), col="red")
+cor(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffLoops)
+cor.test(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffLoops)[3]
+cor.test(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffLoops)$conf.int[1:2]
+# diffPMNLE vs diffLoops r=0.60 r2=0.36 p=5.50e-290 95% CI = 0.58 to 0.62
+pvalues <- c(5.50e-290, pvalues) # p value 17
+
+# trios
+Plasmid_PPI_dat3$cTri_all <- as.numeric(Plasmid_PPI_dat3$cTri_all)
+Plasmid_PPI_dat3$cTri <- as.numeric(Plasmid_PPI_dat3$cTri)
+Plasmid_PPI_dat3$diffTrios <- as.numeric(Plasmid_PPI_dat3$diffTrios)
+Plasmid_PPI_dat3$diffTrios <-(Plasmid_PPI_dat3$cTri_all - 
+                       Plasmid_PPI_dat3$cTri)/(Plasmid_PPI_dat3$cTri_all) 
+hist(Plasmid_PPI_dat3$diffTrios, breaks=123, col="grey", main="", cex.axis=1.4,
+     xlab="Difference in numbers of trios", cex=1.4,  cex.lab=1.4) + grid()
+summary(Plasmid_PPI_dat3$diffTrios)
+sd(Plasmid_PPI_dat3$diffTrios) # SD = 
+#     Min.   1st Qu.    Median      Mean   3rd Qu.      Max.     
+#    0.04    0.62     0.76      0.73      0.86      1.00000
+
+plot(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffTrios) + grid()
+abline(lm(Plasmid_PPI_dat3$diffTrios ~ Plasmid_PPI_dat3$diffPMNLE), col="red")
+cor(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffTrios)
+cor.test(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffTrios)[3]
+cor.test(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffTrios)$conf.int[1:2]
+# diffPMNLE vs diffTrios r=0.315 r2=0.10 p=1e-1 95% CI = 0.28 to 0.35
+pvalues <- c(1e-1, pvalues) # p value 18
+
+# Components
+Plasmid_PPI_dat3$diffCcs <-(Plasmid_PPI_dat3$ccs_all -
+                        Plasmid_PPI_dat3$ccs)/(Plasmid_PPI_dat3$ccs_all) 
+hist(Plasmid_PPI_dat3$diffCcs, breaks=123, col="grey", main="", cex.axis=1.4,
+     xlab="Difference in numbers of PPI network components", cex=1.4, 
+     cex.lab=1.4) + grid()
+summary(Plasmid_PPI_dat3$diffCcs)
+sd(Plasmid_PPI_dat3$diffCcs) # SD = 
+str(Plasmid_PPI_dat3$diffCcs) # 4422 - 126 samples = 4,398 samples
+#     Min.   1st Qu.    Median      Mean   3rd Qu.      Max.      NA's 
+#       -31     -1.1429  -0.6429    -Inf -0.3684  0.0000 
+
+Plasmid_PPI_dat4 <- (Plasmid_PPI_dat3 %>% filter_all(all_vars(!is.infinite(.))))
+plot(Plasmid_PPI_dat4$diffPMNLE, Plasmid_PPI_dat4$diffCcs) + grid()
+abline(lm(Plasmid_PPI_dat4$diffCcs ~ Plasmid_PPI_dat4$diffPMNLE), col="red")
+cor(Plasmid_PPI_dat4$diffPMNLE, Plasmid_PPI_dat4$diffCcs)**2
+cor.test(Plasmid_PPI_dat4$diffPMNLE, Plasmid_PPI_dat4$diffCcs)[3]
+cor.test(Plasmid_PPI_dat4$diffPMNLE, Plasmid_PPI_dat4$diffCcs)$conf.int[1:2]
+# diffPMNLE vs diffCcs r=-0.425 r2=0.18 p=1.53e-130 95% CI = -0.45 to 0.40
+pvalues <- c(1.53e-130, pvalues) # p value 19
+pvalues <- c(2.2e-16, pvalues) # p value 20 from Figure 1
+pvalues <- c(2.2e-16, pvalues) # p value 21 from Figure 3
+data.frame(pvalues, p.adjust(pvalues, method="BH"))
+##################
+
+########################################################################
+########### plasmid-associated genes & per sample rates ###############################
+########################################################################
+
+sums <- data.frame(colSums(new))  
+summary(sums$colSums.new.)       # samples per plasmid gene
+logsums <-  (sums$colSums.new.[sums$colSums.new. >0]) # plasmid genes 
+rows1 <- data.frame(rowSums(new)) #  plasmid genes per sample
+logrows1 <- (rows1$rowSums.new.[rows1$rowSums.new. > 0])
+summary(rows1$rowSums.new.)   #  plasmid genes per sample
+getmode <- function(v) {   uniqv <- unique(v)
+   uniqv[which.max(tabulate(match(v, uniqv)))] }
+getmode(rows1$rowSums.new.[rows1$rowSums.new. > 0])
+pdf("Figure_3_hist_plasmidgenes.pdf", width=10, height=6, bg="white")
+par(mfrow=c(1,2))
+hist(logsums, breaks=24, col="red", main="", cex=1.1,
+     ylab="Number of plasmid-associated genes",
+     xlab="Number of samples with each plasmid gene") + grid() 
+hist((logrows1), breaks=93, col="lightgray", main="",
+     ylab="Number of samples",
+     xlab="Numbers of plasmid genes per sample", cex=1.1) + grid() 
+dev.off()
+
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/RMD_FILES")
+Plasmid_PPI_data_new <- read.xlsx("FinalTable.xlsx")
+str(Plasmid_PPI_data_new) # 4377 obs. of  7 variables
+
+rownames(new) <- str_remove(rownames(new), "\\.") # seems to only remove one at a time!?
+rownames(new) <- str_remove(rownames(new), "\\.") # seems to only remove one at a time!?
+rownames(new) <- str_remove(rownames(new), "\\:") # seems to only remove one at a time!?
+rownames(new) <- str_remove(rownames(new), "\\:") # seems to only remove one at a time!?
+
+#plasmidPPI <- data.frame(new[rownames(new) %in% Plasmid_PPI_data_new$Sample, ])
+plasmidPPI <- data.frame(new[Plasmid_PPI_data_new$Sample %in% rownames(new), ])
+plasmidPPI[1:3,1:4]
+dim(plasmidPPI) # should be 4433 9172
+
+rows1_PPI <- data.frame(rowSums(plasmidPPI)) #  plasmid genes per sample
+summary(rows1_PPI$rowSums.plasmidPPI.)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+# 0.0     0.0   384.0   376.2   528.0  2906.0 
+sums_PPI <- data.frame(colSums(plasmidPPI))  
+logsums_PPI <- log10(sums_PPI$colSums.plasmidPPI.) # plasmid genes 
+
+######## heatmap ######
+# do heatmap of plasmid genes with matches only
+# install.packages("gplots")
+library(gplots)
+
+plasmidPPI_2 <- plasmidPPI %>% select_if(colSums(.) != 0)
+dim(plasmidPPI_2) # 4429 samples by 7126 genes
+
+pdf("Figure_S5_heatmap_plasmidgenes.pdf", width=36, height=36, bg="white")
+heatmap.2(as.matrix(plasmidPPI_2), dendrogram="both", trace="none",
+          margin=c(5,16), cex.lab=0.1, cex.axis=0.1, col=hcl.colors(10,"BluYl"))
+dev.off()
+
+#### get dendrograms of samples
+new_map <- heatmap.2(as.matrix(plasmidPPI_2), dendrogram="both", trace="none",
+          margin=c(8,11), cex.lab=0.2, cex.axis=0.2, col=hcl.colors(50,"BluYl"))
+str(new_map)
+plot(new_map$rowDendrogram)
+plot(new_map$colDendrogram)
+
+########################################################################
+########### giant heatmap of plasmid-related genes #####################
+########################################################################
+
+############ check sorted samples
+new_PPI_sorted <- plasmidPPI_2[ order(row.names(plasmidPPI_2)), ]
+dim(new_PPI_sorted) 
+pdf("heatmap_plasmidgenes.sorted.200x140.pdf", width=200, height=140, bg="white")
+heatmap.2(as.matrix(new_PPI_sorted), dendrogram="none", trace="none",
+          Rowv=NULL, Colv=NULL, key=F, keysize=0, margin=c(4,14),
+          col=hcl.colors(10,"BluYl"), cexRow=0.1, cexCol=0.1)
+dev.off()
+
+########################################################################
+########### PCA ################################## #####################
+########################################################################
+
+# all across genes 
+new_2 <- new %>% select_if(colSums(.) != 0)
+dim(new_2) # 4445 samples by 7,128 genes
+
+pca_proc5 <- prcomp(t(new_2)) # across genes
+pcvalue1 = round(100*pca_proc5$sdev[1]^2/(sum(pca_proc5$sdev^2)),1)
+pcvalue2 = round(100*pca_proc5$sdev[2]^2/(sum(pca_proc5$sdev^2)),1)
+pcvalue1hw = 30*pcvalue1 # pixel PC1
+pcvalue2hw = 30*pcvalue2 # pixel PC2
+mycol<- c(rainbow(dim(new_2)[2], start=1, end=.1)) # group samples
+png(file="All_PCA_1v2_AcrossGenes.png", width=pcvalue1hw,
+    height=pcvalue2hw*3, units="px")
+par(mar = c(5, 5, 5, 5))
+plot(pca_proc5$x[,1], pca_proc5$x[,2], col=mycol, xlab=pcvalue1, ylab=pcvalue2,
+     main='All: PC1 v PC2 across genes', cex=1, cex.axis=2,
+     cex.lab=2) + grid()
+dev.off() # 2.7% for PC3, unimportant
+
+# All across samples 
+pca_proc33 <- prcomp((new_2)) # across genes
+pcvalue1 = round(100*pca_proc33$sdev[1]^2/(sum(pca_proc33$sdev^2)),1)
+pcvalue2 = round(100*pca_proc33$sdev[2]^2/(sum(pca_proc33$sdev^2)),1)
+pcvalue3 = round(100*pca_proc33$sdev[3]^2/(sum(pca_proc33$sdev^2)),1)
+pcvalue1hw = 30*pcvalue1 # pixel PC1
+pcvalue2hw = 30*pcvalue2 # pixel PC2
+pcvalue3hw = 30*pcvalue3 # pixel PC3
+mycol<- c(rainbow(dim(new_2)[1], start=1, end=.1)) # group samples
+png(file="All_PCA_1v2_AcrossSamples.png", width=1.5*pcvalue1hw,
+    height=3*pcvalue2hw, units="px")
+par(mar = c(5, 5, 5, 5))
+plot(pca_proc33$x[,1], pca_proc33$x[,2], col=mycol, xlab=pcvalue1, ylab=pcvalue2,
+     main='All: PC1 v PC2 across samples', cex=1, cex.axis=2,
+     cex.lab=2) + grid()
+dev.off()
+
+# PC1 vs PC3 # 2.7% for PC3, unimportant
+png(file="All_PCA_1v3_AcrossSamples.png", width=2.5*pcvalue1hw,
+    height=2.5*pcvalue3hw, units="px")
+par(mar = c(5, 5, 5, 5))
+plot(pca_proc33$x[,1], pca_proc33$x[,3], col=mycol,  xlab=pcvalue1, ylab=pcvalue3,
+     main='All: PC1 v PC3 across samples', cex=1, cex.axis=2,
+     cex.lab=2) + grid()
+dev.off()
+
+# PC2 vs PC3
+png(file="AllI_PCA_2v3_AcrossGenes.png", width=4*pcvalue2hw,
+    height=4*pcvalue3hw, units="px")
+par(mar = c(5, 5, 5, 5))
+plot(pca_proc33$x[,2], pca_proc33$x[,3], col="red",  xlab=pcvalue2, ylab=pcvalue3,
+     main='High PPI: PC3 v PC3 across genes', cex=0.3, cex.axis=2,
+     cex.lab=2) + grid()
+dev.off()
+
+# All_PCA_Viz_AcrossSamples 
+outall_1 <- fviz_pca_ind(pca_proc33, col.ind="cos2", repel=T, cex=0.1,
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"))+
+  theme(legend.position = "none") + labs(tag="A") + 
+  ggtitle("All: PC1 v PC2 across samples")
+
+# All_PCA_Viz_AcrossGenes
+outall_2 <- fviz_pca_ind(pca_proc5, col.ind="cos2", repel=T, cex=0.1,
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"))+
+  theme(legend.position = "none") + labs(tag="B") + 
+  ggtitle("All: PC1 v PC2 across genes")
+# plot them
+png("Figure_S6_All_PCA.png", width=1311,height=911, bg="white", units="px")
+  par(mfrow = c(1, 2))
+  multiplot(outall_1, outall_2)
+  dev.off()
+
+########################################################################
+########### NMF of plasmid-related genes #####################
+########################################################################
+
+# Given a u x v matrix A 
+# find nonnegative, rank-k matrices W (u x k) and H (k x v) such that A ≈ WH
+# column j of A = linear combination of columns of W, with the coefficients
+# being column j of H. W  forms a pseudobasis for the columns of A.
+# The larger the rank k, the better our approximation
+# Typically hope that a good approximation can be achieved with k << v.
+
+# install.packages("NMF")
+library(NMF)
+install.extras('NMF')
+dim(plasmidPPI_2) # 4429 samples x 7126 genes
+plasmidPPI_3 <- plasmidPPI_2[rowSums(plasmidPPI_2[, -1]) > 0, ]
+   # Remove rows with all NA values
+X <- plasmidPPI_3[rowSums(is.na(plasmidPPI_3))==0,]
+dim(X) # 3164 samples x 7126 genes if 0 as thresholds
+        
+# set memory on Unix
+# ulimit  -s 97656 # change memory stack size to 10 times higher 
+# R --slave -e 'Cstack_info()["size"]' # check effect
+# get: 94999756
+
+# For laptop: ulimit  -s 65532
+# R --slave -e 'Cstack_info()["size"]'
+# size = 63749529 
+
+################ test set #####
+# X2 <- syntheticNMF(100, 3, 20, noise=2) # plasmidPPI_4
+# n <- nrow(X2)
+# d <- rnorm(n)
+# e <- unlist(mapply(rep, c('X', 'Y', 'Z'), 10))
+# e <- c(e, rep(NA, n-length(e)))
+# rdata <- data.frame(Var=d, Type=e)
+# p <- ncol(X2)
+# a <- sample(c('alpha', 'beta', 'gamma'), p, replace=TRUE)
+# c <- rnorm(p) # gather them in a data.frame
+# covariates <- data.frame(a, X2$pData, c) # 20 obs. of  3 variables
+
+# ################ real data #####
+sums <- rowSums(X) # group labels
+covariates <- data.frame(rownames(X), sums) # 
+#png("aheatmap.png", width=2500, height=2600, units="px")
+#aheatmap(X, annCol=covariates) # draw heatmap
+#dev.off()
+# get rank
+# NER_30 <- nmfEstimateRank(X, seq(10,50,10), method='brunet', nrun=10)
+
+estim.r.2728 <- nmf(X, c(27,28), nrun=12, seed=123456)
+dim(estim.r.2728)
+plot(estim.r.2728) # drops when?
+png("NMF.estim.r.2728.png", width=1100, height=1100, units="px")
+plot(estim.r.2728) # drops when?
+dev.off()
+
+estim.r.2730 <- nmf(X, c(27,30), nrun=12, seed=123456)
+dim(estim.r.2730)
+plot(estim.r.2730) # drops when?
+png("NMF.estim.r.2730.png", width=1100, height=1100, units="px")
+plot(estim.r.2730) # drops when?
+dev.off()
+
+estim.r.2527 <- nmf(X, c(25,27), nrun=12, seed=123456)
+dim(estim.r.2527)
+plot(estim.r.2527) # drops when?
+png("NMF.estim.r.2527.png", width=2500, height=2600, units="px")
+plot(estim.r.2527) # drops when?
+dev.off()
+
+# Cophenetic correlation coefficient: repeat NMF several times per rank and
+# calculate how similar are the results: how stable are the clusters, give
+# that the initial seed is random. Choose the max K before the cophenetic
+# coefficient drops.
+# see fit
+# coefmap(NER_30)
+# basismap(NER_30)
+# consensusmap(NER_30)
+
+# perform 2-rank NMF using default algorithm
+# estim_10 = nmf(X, 10, seed='random') # estimate rank=12
+estim_28 = nmf(X, 27, seed='random') # estimate rank=12
+estim_27 <- estim_28
+# estim_30 = nmf(X, 30, seed='random') # estimate rank=12
+# estim_40 = nmf(X, 40, seed='random') # estimate rank=12
+# estim_50 = nmf(X, 50, seed='random') # estimate rank=12
+# modeling the matrix X with g genes and s samples
+# get product of a matrix h of g gene weights for k factors and a matrix w
+# of s sample weights for k factors.
+str(estim_27)  #  3164 samples x 7126 genes  
+
+png("NMF.estim_27.png", width=2500, height=2600, units="px")
+plot(estim_27)
+dev.off()
+
+# png("nmf.basismap.10.png", width=8600, height=26500, units="px")
+# basismap(estim_10);  dev.off()
+# png("nmf.coefmap.10.png", width=26500, height=8600, units="px")
+# coefmap(estim_10); dev.off()
+
+png("nmf.basismap.27.png", width=12600, height=36500, units="px")
+basismap(estim_27, fontsize=20, cexRow=2, cexCol=2)
+dev.off()
+pdf("nmf.basismap.27.pdf", width=56, height=156, bg="white")
+basismap(estim_27, fontsize=20, cexRow=2, cexCol=2)
+dev.off()
+png("nmf.coefmap.27.png", width=36500, height=12600, units="px")
+coefmap(estim_27, fontsize=20, cexRow=2, cexCol=2)
+dev.off()
+pdf("nmf.coefmap.27.pdf", width=156, height=56, bg="white")
+coefmap(estim_27, fontsize=20, cexRow=2, cexCol=2)
+dev.off()
+
+# png("nmf.basismap.30.png", width=8600, height=26500, units="px")
+# basismap(estim_30);  dev.off()
+# png("nmf.coefmap.30.png", width=26500, height=8600, units="px")
+# coefmap(estim_30); dev.off()
+# png("nmf.basismap.40.png", width=8600, height=26500, units="px")
+# basismap(estim_40);  dev.off()
+# png("nmf.coefmap.40.png", width=26500, height=8600, units="px")
+# coefmap(estim_40); dev.off()
+# png("nmf.basismap.50.png", width=8600, height=26500, units="px")
+# basismap(estim_50);  dev.off()
+# png("nmf.coefmap.50.png", width=26500, height=8600, units="px")
+# coefmap(estim_50); dev.off()
+
+# X is a n x p matrix with rank r=50
+w <- data.frame(basis(estim_27)) # basis matrix (sample profiles)
+str(w) #  2,372 samples x 25 dimensions # metasamples? 
+h <- data.frame(t(coef(estim_27))) # mixture coefficient matrix (gene profiles)
+str(h) #  6,779 genes x 25 dimensions # mixture coefficient, plasmid gene profiles
+write.csv(w, "metasamples.csv")
+write.csv(h, "mixture_coefficients.csv")
+hist(log10(w$X9), xlab="metasamples", ylim=c(0,30), breaks=49) + grid()
+length(subset(w, X9 > 0.1)$X9) # 109 samples
+
+pdf("metasamples.each.pdf", width=16, height=16, bg="white")
+par(mfrow=c(4,7))
+for (i in 1:27){
+  print(hist(log10(w[,i]), ylim=c(0,550), breaks=49, xlab=i, main=i))
+        grid() }
+dev.off()
+
+pdf("mixture_coefficients.each.pdf", width=16, height=16, bg="white")
+par(mfrow=c(4,7))
+for (i in 1:27){
+  print(hist(log10(h[,i]), ylim=c(0,2100), breaks=49, xlab=i, main=i))
+        grid() }
+dev.off()
+
+length(h[h > 0.001])/27 # average number of genes associated with each rank
+# 1305
+
+length(subset(h, X7 > 0.001)$X9) # 3399 genes in the Enterobactales order
+
+
+s <- featureScore(estim_25)
+summary(s)
+#    Min. 1st Qu.  Median Mean 3rd Qu.    Max. 
+#   0.202  0.573  0.676  0.684  0.796  1.0000 
+s2 <- extractFeatures(estim_25)
+dim(s2)
+
+p1_nmf <- ggplot(w, aes(x=w$X1, y=w$X12)) +
+  geom_point(color ="blue", size=0.3, shape=1, (aes(alpha=0.1)), show.legend=F) +
+  scale_x_continuous(name="Rank 1") + scale_y_continuous(name="Rank 2")  + 
+  annotation_custom(grobTree(textGrob(paste("For ",length(w$X1)," bacterial samples",sep=""),
+              x=0.22, y=.92, hjust=0, gp=gpar(col="black", fontsize=11)))) 
+p11_nmf <- ggExtra::ggMarginal(p1_nmf, type = "densigram", size =6, colour="grey", bins=20)
+pdf("NMF_1_2.25.pdf", width=6, height=6, bg="white")
+ggarrange(p11_nmf, ncol=1, nrow=1)
+dev.off()
+
+p1_nmf2 <- ggplot(h, aes(x=h$X1, y=h$X3)) +
+  geom_point(color ="blue", size=0.3, shape=1, (aes(alpha=0.1)), show.legend=F) +
+  scale_x_continuous(name="Rank 1") + scale_y_continuous(name="Rank 2")  + 
+  annotation_custom(grobTree(textGrob(paste("For ",length(h$X1)," genes",sep=""),
+              x=0.22, y=.92, hjust=0, gp=gpar(col="black", fontsize=11))))  
+p11_nmf2 <- ggExtra::ggMarginal(p1_nmf2, type="densigram", size =6, colour="grey", bins=20)
+pdf("NMF_1_2_genes.25.pdf", width=6, height=6, bg="white")
+ggarrange(p11_nmf2, ncol=1, nrow=1)
+dev.off()
+
+# citation('NMF')
+
+#################################################################
+# install.packages("dendextend")
+library(dendextend)
+hcl1 <- hclust(dist(plasmidPPI_4), method="complete")
+str(hc11) # get Enterobacterales group to compare to NMF output
+
+dim(plasmidPPI_4) # 2,372 samples x 5,109 genes
+pdf("dendrogram.pdf", width=12, height=319, bg="white")
+par(mar = c(1, 1, 1, 25))
+plot(as.dendrogram(hcl1), horiz=T, cex=0.01, cex.axis=2, cex.lab=2)
+dev.off()
+my_gene_col <- cutree(tree = as.dendrogram(hcl1), k=12)
+str(my_gene_col)
+
+########################################################################
+########### LSA of plasmid-related genes #####################
+########################################################################
+
+# install.packages("lsa")
+library(lsa)
+dim(plasmidPPI_2)  # 4429 samples x 7126 genes
+mylsa <- lsa(plasmidPPI_2)
+
+str(mylsa) # $tk = 1-4429 samples (left singular vector)
+# $dk 1-7126 genes (document vector) - variable data
+# and diagnonal matrix $sk 1:360 - 360 components
+# Can change Dk to other plasmid gene patterns
+sum(mylsa$sk) # 10987.1
+head(mylsa$sk) # 838, 256, etc
+
+mycol<- c(rainbow(dim(new_2)[1], start=1, end=.1)) # group samples
+png(file="LSA_1v2_acrossGenes.png")
+par(mar = c(5, 5, 5, 5))
+plot(mylsa$tk[,1:2], col=mycol, xlab=round(mylsa$sk[1]/sum(mylsa$sk),3), 
+     ylab=round(mylsa$sk[2]/sum(mylsa$sk),3),
+     main='LSA across genes', cex=0.1, cex.axis=1.5, cex.lab=1.5) + grid()
+dev.off()
+
+mylsa_t <- lsa(t(plasmidPPI_2))
+str(mylsa_t) # $tk = 1-7126 genes (left singular vector)
+# $dk 1-4429 samples (document vector) - variable data
+# and diagnonal matrix $sk 1:360 - 360 components
+# Can change Dk to other sample patterns
+sum(mylsa_t$sk) # 10987.1
+head(mylsa_t$sk) # 838, 256, etc
+mycol<- c(rainbow(dim(new_2)[1], start=0.1, end=2)) # group samples
+png(file="LSA_1v2_acrossSamples.png")
+par(mar = c(5, 5, 5, 5))
+plot(mylsa_t$tk[,1:2], col=mycol, xlab=round(mylsa_t$sk[1]/sum(mylsa_t$sk),3), 
+     ylab=round(mylsa_t$sk[2]/sum(mylsa_t$sk),3),
+     main='LSA across samples', cex=0.1, cex.axis=1.5, cex.lab=1.5) + grid()
+dev.off()
+
+#################################################################
+##### Plot plasmid and chromosomal genes’ PPI rates per sample ##
+#################################################################
+
+# CFT073 <- data.frame(read.csv("../OUTPUT7/Escherichia_coli_CFT073__genes_data.csv"))
+# sum(subset(CFT073, Plasmid==1)$Interactions)/length((subset(CFT073, Plasmid==1)$Gene))
+# plasmid proteins' PPIs 33.9
+# sum(subset(CFT073, Plasmid==0)$Interactions)/length((subset(CFT073, Plasmid==0)$Gene))
+# chromosomal proteins' PPIs 3.9
+
+str(Plasmid_PPI_data) # 4377 obs. of  7 variables
+Plasmid_PPI_data <- Plasmid_PPI_data[order(Plasmid_PPI_data$Sample),]
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/OUTPUT7")
+for (k in 1:length(list.files())){
+     name <- list.files()[k]
+     try ( in2 <- data.frame(read.csv(name)) )
+     in2 <- in2[,-c(1)]
+     name = gsub("\\.(?=[^.]*\\.)", "", name, perl=T)
+     name = gsub("\\:", "", name, perl=T)
+     name = gsub("_genes_data.csv", "", name, perl=T)
+     print(name) 
+     for (kk in 1:length(Plasmid_PPI_data$Sample)){
+       if(name == Plasmid_PPI_data[kk,]$Sample){
+        Plasmid_PPI_data[kk,8] <-as.numeric(sum(subset(in2, Plasmid==1)$Interactions)/
+                               length(subset(in2, Plasmid==1)$Gene)) # plasmid
+        Plasmid_PPI_data[kk,9] <-as.numeric(sum(subset(in2, Plasmid==0)$Interactions)/
+                               length(subset(in2, Plasmid==0)$Gene)) # chrom
+        Plasmid_PPI_data[kk,10] <- as.numeric(Plasmid_PPI_data[kk,8])/ 
+                                     as.numeric(Plasmid_PPI_data[kk,9])
+       }
+     } # end for
+} # end for
+# Plasmid_PPI_data <- Plasmid_PPI_data[,-c(8,9)]
+# setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/RMDFILES/")
+colnames(Plasmid_PPI_data)[8] <- c("Plasmid_Interations")
+colnames(Plasmid_PPI_data)[9] <- c("Chrom_Interations")
+colnames(Plasmid_PPI_data)[10] <- c("Ratio_Interations")
+str(Plasmid_PPI_data)
+View(Plasmid_PPI_data) # 4377 obs. of  10 variables
+        # Sample, Plasmid_PPI, Chrom_PPI, Fraction, 
+        #  inputProteins, interactions, Plasmid_genes
+#write.csv(Plasmid_PPI_data, "Plasmid_PPI_data_full.csv")
+
+# re-try
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/OUTPUT7")
+
+table2 <- data.frame(name=character(), Plasmid_Interactions=numeric(),
+                    Chrom_Interactions=numeric(), Ratio=numeric())
+for (k in 1:length(list.files())){
+     name <- list.files()[k]
+     try ( in2 <- data.frame(read.csv(name)) )
+     in2 <- in2[,-c(1)]
+     name = gsub("\\.(?=[^.]*\\.)", "", name, perl=T)
+     name = gsub("\\:", "", name, perl=T)
+     name = gsub("_genes_data.csv", "", name, perl=T)
+     print(name) 
+     table2[k,1] <- name
+     table2[k,2] <- as.numeric(sum(subset(in2, Plasmid==1)$Interactions)/
+                               length(subset(in2, Plasmid==1)$Gene)) # plasmid
+     table2[k,3] <- as.numeric(sum(subset(in2, Plasmid==0)$Interactions)/
+                               length(subset(in2, Plasmid==0)$Gene)) # chrom
+     table2[k,4] <- as.numeric(table2[k,2])/as.numeric(table2[k,3])
+} # end for
+str(table2)
+table2 <- data.frame(table2)
+table2$Plasmid_Interactions[table2$Plasmid_Interactions == "NaN"] <- 0
+table2$Chrom_Interactions[table2$Chrom_Interactions == "NaN"] <- 0
+table2$Ratio[table2$Ratio == "NaN"] <- 0
+table2$Plasmid_Interactions <- as.numeric(table2$Plasmid_Interactions)
+table2$Chrom_Interactions <- as.numeric(table2$Chrom_Interactions)
+table2$Ratio <- as.numeric(table2$Ratio)
+
+summary(table2$Plasmid_Interactions)
+sd(table2$Plasmid_Interactions)
+summary(table2$Chrom_Interactions)
+sd(table2$Chrom_Interactions)
+summary(table2$Ratio)
+sd(table2$Ratio)
+
+png("Plasmid_Gene_Interaction_Rate_Distribution.png")
+hist( (table2$Plasmid_Interactions), breaks=91, col="green", main="", cex=1.1,
+     ylab="Number of samples", xlim=c(0,100), ylim=c(0,1300), density =42,
+     xlab="Average #interactions per gene") + grid()
+dev.off()
+png("Chrom_Gene_Interaction_Rate_Distribution.png")
+hist( (table2$Chrom_Interactions), breaks=91, col="purple", main="", cex=1.1,
+     ylab="Number of samples", xlim=c(0,20), ylim=c(0,1300), density =42,
+     xlab="Average #interactions per gene") + grid()
+dev.off()
+png("Chrom_Plasmid_Gene_Interaction_Ratio_Distribution.png")
+hist(log2(table2$Ratio), breaks=93, col="blue", main="", cex=1.1,
+     ylab="Number of samples", density =92, # xlim=c(0.5,2.5),
+     xlab="Log2 of plasmid/chrom ratio of interactions per gene") + grid() 
+dev.off()
+write.csv(table2, "Plasmid_PPI_rates.csv")
+
+
+
+# #################################################################
+# RcppML::NMF for large sparse matrices: # doesn't work!!
+# see also rsparse::WRMF
+# https://github.com/zdebruine/RcppML
+# install.packages("RcppML")
+# library(RcppML)
+# model <- RcppML::nmf(plasmidPPI_2, k = 10)
+# str(model)
+#################################################################
+
+# look at interactions per protein per sample and chr/plasmid context
+# Not possible, need more memory
+
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/RMD_FILES/")
+Plasmid_PPI_data <- read.xlsx("FinalTable.xlsx")
+str(Plasmid_PPI_data) # 4377 obs. of  7 variables
+
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/OUTPUT7")
+str(list.files()) # 4395 samples as Gene, Plasmid, Interactions
+# "Escherichia_coli_str_K-12_substr_MG1655__genes_data.csv"
+
+# samples 4,399 => 4 x 11 -> 100 times
+p_dist <- c()
+t_dist <- c()
+
+par(mfrow=c(1,1))
+for (i in 1:length(list.files(pattern="_genes_data.csv"))){ # get genes and plasmids
+   test1 <- read.csv(list.files(pattern="_genes_data.csv")[i]) # read in samples 4393
+   test1 <- test1[-c(1)] # remove extra column
+   test1 <- test1[-c(1)] # remove extra column
+   if(grepl( "_genes_data.csv", list.files(pattern="_genes_data.csv")[i], fixed = T)){
+   name <- str_replace_all(list.files(pattern="_genes_data.csv")[i],
+                           "_genes_data.csv", "") # remove
+   name <- str_replace_all(name, "_", " ") # remove
+   
+   if((length(subset(test1, Plasmid==0)$Interactions)>2) & 
+     ((length(subset(test1, Plasmid==1)$Interactions)>2)) ){ # if ok
+  # p_dist <- c(p_dist, t.test(subset(test1, Plasmid==0)$Interactions,
+    #        subset(test1, Plasmid==1)$Interactions)$p.value )
+   #t_dist <- c(t_dist, t.test(subset(test1, Plasmid==0)$Interactions,
+   #         subset(test1, Plasmid==1)$Interactions)$statistic ) 
+   
+   p <- ggplot(test1, aes(x=factor(Plasmid),
+                    y=log10(Interactions), color=Plasmid)) + 
+    geom_violin(draw_quantiles=T, show.legend=F) +  
+    labs(title=name, x="Genomic context",
+         y = "log10-scaled number of interactions per gene")+
+      scale_x_discrete(labels = c('Chromosomal','Plasmid')) +
+    geom_jitter(shape=1, size=0.3, aes(alpha=0.1),
+                position=position_jitter(0.3), show.legend=F) +
+    stat_summary(fun.y=median, geom="point", size=7, color=c("black","blue"))
+    pdf(paste0(name,".pdf",sep=""), width=7, height=7, bg="white")
+    print(p) # add to list
+    dev.off() # save file
+    print(i) } } # end if valid files
+} # end for samples
+
+p_dist2 <- p.adjust(p_dist, method="BH")
+par(mfrow=c(2,1))
+png("FigS10_Triangles_distribution_full.png", width=500, height=600, units="px")
+hist(log10(p_dist2), breaks=55, main="", col="purple",
+ xlab="Difference in chrom vs plasmid interactions log10-scaled p value distribution")+
+  grid()
+hist((t_dist), breaks=55, main="", col="darkgreen", xlim=c(-30,2),
+  xlab="Difference in chrom vs plasmid interactions t-stat distribution") + grid()
+dev.off()
+
+plot(log10(p_dist2), t_dist, cex=0.1, col="red")+ grid()
+################
+
+
+gene_list <- c()
+plasmid_status <- c()
+new.env(hash=TRUE)
+detach("package:STRINGdb", unload=TRUE)
+library(hash)
+genes <- hash()
+
+for (i in 1:11){ # length(list.files())){ # get genes and plasmids
+   test1 <- read.csv(list.files()[i]) # read in sample
+   test1 <- test1[-c(1)] # remove extra column
+   for (k in 1:length(test1$Gene)){ # get the genes and contexts
+     genes[[test1$Gene[k]]] = test1$Plasmid[k]
+     gene_list <- unique(c(gene_list, test1$Gene[k])) }
+} # end for samples
+#View(genes)
+#genes[["ubix"]]
+gene_list <- data.frame(gene_list)
+str(gene_list)
+View(gene_list)
+write.csv(gene_list, "gene_list.csv")
+
+# for(i in 1:length(gene_list)){ print(genes[[gene_list[i]]]) } # end for 
+
+genelistout <- as.data.frame(matrix(0, ncol=length(gene_list$gene_list), #
+                              nrow =length(list.files()))) # 4395 samples 
+colnames(genelistout) <- gene_list$gene_list
+gene_list2 <- str_replace_all(gene_list$gene_list, "_genes_data.csv", "") # remove
+genelistout <- data.frame(genelistout)
+rownames(genelistout) <- gene_list2
+head(str(genelistout))
+
+
+for (i in 1:2){ # length(list.files())){ # for each sample
+   test1 <- read.csv(list.files()[i]) # read in sample
+   test1 <- test1[-c(1)] # remove extra column, Gene, Plasmid, Interactions
+   
+   for (k in 1:length(colnames(genelistout))){ # for each possible gene
+     if(colnames(genelistout)[k] == test1$Gene){ # if matching gene 
+         genelistout[1,k] <- test1$Interaction
+     } # end if matching gene
+   } # end for genes
+} # end for samples
+
+plasmid_data <- c()
+for (k in 1:length(colnames(genelistout))){ # for each
+    plasmid_data <- c(plasmid_data, genes[[colnames(genelistout)[k]]])
+} # end for plasmids
+
+# add plasmid context
+genelistout2 <- rbind(plasmid_data, genelistout)
+
+########################################################################
+########### all proteins per sample to get PPI info #####################
+########################################################################
+
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/OUTPUT7/")
+#nn <- data.frame(read.csv("Escherichia_coli_O157_H7_str._EDL933__genes_data.csv"))
+#nn <- nn[,-c(1)]
+#str(nn)
+# X,"Gene","Plasmid","Interactions"
+# "1","aaea",1,4
+# "2","aaeb",1,19
+
+gene_list_all <- c()
+for (k in 1:length(list.files(pattern = "\\.csv$"))){
+     name <- list.files(pattern = "\\.csv$")[k]  # 4393 samples
+     try ( in2 <- data.frame(read.csv(name)) )
+     in2 <- in2[,-c(1)]
+     name = gsub("\\.(?=[^.]*\\.)", "", name, perl=T)
+     name = gsub("\\:", "", name, perl=T)
+     name = gsub("_genes_data.csv", "", name, perl=T)
+
+     gene_list_all <- unique(sort(c(gene_list_all, in2$Gene))) # get gene names
+     gene_list_plasmid <-unique(sort(c(gene_list_plasmid, subset(in2, Plasmid==1)$Gene))) 
+     gene_list_chr <- unique(sort(c(gene_list_plasmid, subset(in2, Plasmid==0)$Gene)))
+} # end for
+
+gene_list_all <- data.frame(unique(sort(gene_list_all)))
+gene_list_all <- gene_list_all[-c(1:78),] # remove incorrect rows
+str(gene_list_all) # 9,551,828 genes
+# write.csv(gene_list_all, "../gene_list_all.csv")
+gene_list_all <- read.csv("../gene_list_all.csv")
+
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/")
+#read in gene_list_plasmid
+# read in data after having made it already above and exported it
+new <- read.csv("plasmidGenesTable2.csv")
+new <- new[-c(1)] # drop empty column
+new[2447:2449,1:4] # example of data
+rownames(new) <- new[,1]
+new <- new[-c(1)] # drop unneeded column
+
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/OUTPUT7/")
+new2 <- data.frame(duplicated(list.files(pattern = "\\.csv$")), 
+                   list.files(pattern = "\\.csv$"))
+dim(new2)
+new3<-subset(new2, new2$duplicated.list.files.pattern.......csv.... ==F)
+dim(new3) #4,377 samples
+interactions_table <- data.frame(matrix(0 , nrow=length(new3$list.files.pattern.......csv...), ncol=length(colnames(new))))
+rownames(interactions_table) <- new3$list.files.pattern.......csv...
+colnames(interactions_table) <- colnames(new)
+str(colnames(interactions_table)) # 9,172 genes
+
+for (k in 1:length(new3$list.files.pattern.......csv...)){
+     name <- new3$list.files.pattern.......csv...[k]
+     try ( in2 <- data.frame(read.csv(name)) )
+     in2 <- in2[,-c(1)]
+     name = gsub("\\.(?=[^.]*\\.)", "", name, perl=T)
+     name = gsub("\\:", "", name, perl=T)
+     name = gsub("_genes_data.csv", "", name, perl=T)
+
+     rownames(interactions_table)[k] = name # samples as rows
+     #str(in2)
+     in3 <- subset(in2, Plasmid==1)
+     #str(in3)
+     print(k)
+     
+     if(length(in3$Gene) >0){ # may have no plasmid-related genes
+     for (jj in 1:length(colnames(interactions_table))){ # for each possible gene
+        for (jjj in 1:length(in3$Gene)){
+           if(colnames(interactions_table)[jj] == in3$Gene[jjj]){ 
+            interactions_table[k,jj] <- in2$Interactions[jj] } # end if match
+        } # end for sample
+     } # end for plasmid genes
+     } # end if data is ok
+} # end for samples
+testy1 <- data.frame(colSums(interactions_table)) # phew it works!!
+head(subset(testy1, colSums.interactions_table. > 20)) # check example
+interactions_table[is.na(interactions_table)] = 0
+dim(interactions_table) # 4377 samples x 9172 genes
+#write.csv(interactions_table, "interactions_table_full.csv")
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/")
+interactions_table <- read.csv("interactions_table_full.csv")
+interactions_table[is.na(interactions_table)] = 0
+rownames(interactions_table) <- new3$list.files.pattern.......csv...
+colnames(interactions_table) <- colnames(new)
+rownames(interactions_table) = gsub("\\.(?=[^.]*\\.)", "", rownames(interactions_table), perl=T)
+rownames(interactions_table) = gsub("\\:", "", rownames(interactions_table), perl=T)
+rownames(interactions_table) = gsub("_genes_data.csv", "", rownames(interactions_table), perl=T)
+rownames(interactions_table)[1:3]
+
+########################################################################
+########### NMF of plasmid-related PPI rates per gene/sample #####################
+########################################################################
+
+# NMF part #
+library(NMF)
+install.extras('NMF')
+interactions_table2 <- data.frame(apply(interactions_table, 2, function(x) as.numeric(as.character(x))))
+interactions_table3 <- data.frame(interactions_table[rowSums(interactions_table[, -1]) > 0, ])
+dim(interactions_table3) # 1713 samples x 9172 genes
+interactions_table3 <- interactions_table3[,-c(1)] # remove unneeded column
+interactions_table4 <- interactions_table3[, colSums(interactions_table3 != 0) > 0]
+dim(interactions_table4) # 1713 samples x 4032 genes if 0 as thresholds
+rownames(interactions_table4)[1:4]
+     
+sums_all <- rowSums(interactions_table4) # group labels
+covariates_all <- data.frame(rownames(interactions_table4), sums_all) # 
+png("covariates_all.png", width=2500, height=2600, units="px")
+aheatmap(interactions_table4, annCol=covariates_all) # draw heatmap
+dev.off()
+
+#estim.r.2429 <- nmf(interactions_table4, c(24,29), nrun=2, seed=123456)
+#estim.r.3137 <- nmf(X, c(31,37), nrun=2, seed=123456)
+#estim.r.2932 <- nmf(X, c(29,32), nrun=2, seed=123456)
+#plot(estim.r.2429) # drops when?
+#png("NMF.estim.r.2429.interactions.all.png", width=1100, height=1100, units="px")
+#plot(estim.r.2429) # drops when?
+#dev.off()
+
+# Cophenetic correlation coefficient: repeat NMF several times per rank and
+# perform 2-rank NMF using default algorithm
+estim_29_all = nmf(interactions_table4, 29, seed='random') # estimate rank=33
+# modeling the matrix interactions_table3 with g genes and s samples
+# get product of a matrix h of g gene weights for k factors and a matrix w
+# of s sample weights for k factors.
+str(estim_29_all)  #  1713 samples x 4032 genes  
+
+png("NMF.estim_29.interactions.all.png", width=2500, height=2600, units="px")
+plot(estim_29_all)
+dev.off()
+png("nmf.basismap.29.interactions.all.png", width=12600, height=36500, units="px")
+basismap(estim_29_all, fontsize=20, cexRow=2, cexCol=2)
+dev.off()
+pdf("nmf.basismap.29.interactions.all.pdf", width=56, height=156, bg="white")
+basismap(estim_29_all, fontsize=20, cexRow=2, cexCol=2)
+dev.off()
+png("nmf.coefmap.29.interactions.all.png", width=36500, height=12600, units="px")
+coefmap(estim_29_all, fontsize=20, cexRow=2, cexCol=2)
+dev.off()
+pdf("nmf.coefmap.29.interactions.all.pdf", width=156, height=56, bg="white")
+coefmap(estim_29_all, fontsize=20, cexRow=2, cexCol=2)
+dev.off()
+
+# X is a n x p matrix with rank r=50
+w_all <- data.frame(basis(estim_29_all)) # basis matrix (sample profiles)
+str(w_all) # 1713 samples x 33 dimensions # metasamples? 
+h_all <- data.frame(t(coef(estim_29_all))) # mixture coefficient matrix (gene profiles)
+str(h_all) #  4032 genes x 33 dimensions # mixture coefficient, plasmid gene profiles
+write.csv(w_all, "metasamples.interactions.all.csv")
+write.csv(h_all, "mixture_coefficients.interactions.all.csv")
+hist(log10(w_all$X6), xlab="metasamples for PPIs all", breaks=49) + grid()
+length(subset(w_all, X6 > 0.001)$X6) # 175 samples
+hist(log10(h_all$X6), xlab="metagenes for PPIs all", breaks=49) + grid()
+length(subset(h_all, X6 > 0.000001)$X6) # 172 samples
+
+length(h_all[h_all > 0.000001])/29 # average number of genes associated with each rank
+
+pdf("metasamples.interactions.pdf", width=16, height=16, bg="white")
+par(mfrow=c(5,6))
+for (i in 1:29){
+  print(hist(log10(w_all[,i]), ylim=c(0,550), breaks=49, xlab=i, main=i))
+        grid() }
+dev.off()
+
+pdf("mixture_coefficients.interactions.pdf", width=16, height=16, bg="white")
+par(mfrow=c(5,6))
+for (i in 1:29){
+  print(hist(log10(h_all[,i]), ylim=c(0,2100), breaks=49, xlab=i, main=i))
+        grid() }
+dev.off()
+# #################################################################
+# Compare NMF outputs
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/Key_Results_Figures")
+input2 <- data.frame(read.csv("Data_for_Fig_S7_metasamples.csv"))
+# metasamples from NMF on plasmid gene presence-absence matrix
+length(subset(input2, X6 > 0.01)$X) # 200 samples
+length(subset(input2, X14 > 0.01)$X) # 130 samples
+
+input4 <- data.frame(read.csv("Data_for_Fig_S11_metasamples.interactions.all.csv"))
+# mixtures gene coefficients from NMF on plasmid gene presence-absence matrix
+length(subset(input4, X6 > 0.01)$X) # 45 samples
+length(subset(input4, X14 > 0.01)$X) # 130 samples
+#length(subset(input4, X14 > 0.01 & X6 > 0.01)$X14) # 15 samples
+
+length(intersect(subset(input2, X6 > 0.01)$X, subset(input4, X6 > 0.01)$X)) 
+# 200 vs 45 => 25 intersection
+25 / (200 + 45 - 25)  # 0.114
+length(intersect(subset(input2, X14 > 0.01)$X, subset(input4, X6 > 0.01)$X)) 
+# 130 vs 45 => 7 intersection
+7 / (130 + 45 - 7)    # 0.042
+length(intersect(subset(input2, X6 > 0.01)$X, subset(input4, X14 > 0.01)$X)) 
+# 200 vs 130 => 42 intersection
+42 / (200 + 130 - 42) # 0.146
+length(intersect(subset(input2, X14 > 0.01)$X, subset(input4, X14 > 0.01)$X)) 
+# 130 vs 130 => 42 intersection
+42 / (130 + 130 - 42) # 0.193
+
+mix2 <- data.frame(read.csv("Data_for_Fig_S8_mixture_coefficients.interactions.all.csv"))
+# metasamples from NMF on plasmid gene PPI rates matrix
+hist(log10(mix2$X6)) + grid()
+length(subset(mix2, X6 > 0.00001)$X6) # 4,004 genes
+length(subset(mix2, X14 > 0.00001)$X14) # 3,639 genes
+length(intersect(subset(mix2, X6 > 0.00001)$X, subset(mix2, X14 > 0.00001)$X)) 
+# 4004 vs 1288 => 2075 intersection
+2075 / (4004 + 1288 - 2075)  # 0.645
+
+mix4 <- data.frame(read.csv("Data_for_Fig_S12_mixture_coefficients.interactions.all.csv"))
+# mixtures gene coefficients from NMF on plasmid gene PPI rates matrix
+hist(log10(mix4$X6)) + grid()
+length(subset(mix4, X6 > 0.00001)$X6) # 1288 genes
+
+length(intersect(subset(mix2, X6 > 0.00001)$X, subset(mix4, X6 > 0.00001)$X)) 
+# 4004 vs 1288 => 748 intersection
+748 / (4004 + 1288 - 748)  # 0.165
+length(intersect(subset(mix2, X14 > 0.00001)$X, subset(mix4, X6 > 0.00001)$X)) 
+# 3639 vs 1288 => 690 intersection
+690 / (3639 + 1288 - 690)  # 0.163
+
+library(xlsx)
+input3 <- read.xlsx("Key_Results_Figures/Table_S3.xlsx", sheetIndex=1)
+str(input3)
+length(subset(input3, Plasmid_genes==0)$Sample) # 1235 have no genes
+length(subset(input3, Plasmid_PPI==0)$Sample) # 1231 have no interactions
+check <- subset(input3, Plasmid_genes==0 & Plasmid_PPI>0) # 11 shit
+View(check)
+View(subset(input3, Plasmid_genes<20 & Plasmid_genes>1 & Plasmid_PPI>0))
+# #################################################################
+```
