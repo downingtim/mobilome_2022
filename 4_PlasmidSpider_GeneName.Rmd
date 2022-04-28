@@ -45,8 +45,8 @@ title: "Plasmid-related gene & PPI main analysis"
 # [13] OUTPUT7 -> points to chromosomal_PPIs_4377.tar.gz -> 4,377 samples' CSV
 #      files for all proteins showing the index, the String IDs for the protein
 #      pairs, combined score, the short String IDs for the protein pairs and
-#      number of chromosomal PPIs (c) - for each sample
-#      See it at Zenodo at https://doi.org/10.6084/m9.figshare.X
+#      number of chromosomal PPIs (c) - for each sample - see it at 
+#   https://drive.google.com/file/d/1gTOucAvkuqDaS14ah7Xzt4Q_CcWdMV4C/view?usp=sharing
 # [14] Data_for_Fig_S7_metasamples.csv = metasamples from NMF on plasmid gene
 #      presence-absence matrix
 # [15] Data_for_Fig_S11_metasamples.interactions.all.csv = mixture gene
@@ -1483,7 +1483,9 @@ text(4.0,8.8, "proteins are excluded", col=alpha("black",0.7), cex=1.1)
 
 ##
 xx2 = log10(Plasmid_PPI_dat3$inputProteins/Plasmid_PPI_dat3$ccs_all)
+str(xx2)
 yy2 = log10(Plasmid_PPI_dat3$Chrom_genes/Plasmid_PPI_dat3$ccs)
+str(yy2)
 temp2 <- (na.omit(data.frame(xx2,yy2)))
 temp2[mapply(is.infinite, temp2)] <- NA
 plot(xx2, yy2, col=alpha("darkgreen", 0.4), cex=0.2, main="", cex.lab=1.2, 
@@ -1497,7 +1499,7 @@ legend(0.94,3.01, legend=c("Expected rate", "Observed rate"),
 text(2.87,1.11, "Samples with fewer connected", col=alpha("black",0.7), cex=1.1)
 text(2.7,1.05, "components when plasmid-related", col=alpha("black",0.7), cex=1.1)
 text(2.87,0.99, "proteins are included", col=alpha("black",0.7), cex=1.1)
-text(1.6,2.6, "Samples with more connected", col=alpha("black",0.7), cex=1.1)
+text(1.6,2.6, "Samples with fewer connected", col=alpha("black",0.7), cex=1.1)
 text(1.7,2.54, "components when plasmid-related", col=alpha("black",0.7), cex=1.1)
 text(1.6,2.48, "proteins are excluded", col=alpha("black",0.7), cex=1.1)
 dev.off()
