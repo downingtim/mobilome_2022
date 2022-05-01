@@ -99,11 +99,12 @@ dev.off()
 
 ####
 
+dat1 <- subset(dat1, Chrom_PPI > 10 & Plasmid_PPI > 10)
 p1 <- ggplot(dat1, aes(x=log10(dat1$Chrom_PPI), y=log10(dat1$Plasmid_PPI))) +
   geom_point(color ="blue", size=0.3, shape=1, (aes(alpha=0.1)), show.legend=F) +
   scale_x_continuous(name="Log10 of number of chromosomal PPIs") +
   scale_y_continuous(name="Log10 of number of plasmid PPIs")  + 
-  geom_smooth(method='lm') +
+  geom_smooth(method='lm') + #  xlim(1, 5) + ylim(4, 6) 
   annotation_custom(grobTree(textGrob(paste("For ",length(dat1$Sample)," bacterial samples",sep=""),
               x=0.02, y=.02, hjust=0, gp=gpar(col="black", fontsize=8)))) +
   geom_point(data=dat1, aes(x=log10(dat1$Chrom_PPI), y=log10(dat1$Plasmid_PPI)),
@@ -113,7 +114,7 @@ p1 <- ggplot(dat1, aes(x=log10(dat1$Chrom_PPI), y=log10(dat1$Plasmid_PPI))) +
               x=0.7, y=.02, hjust=0, gp=gpar(col="black", fontsize=8))))  
 p11 <- ggExtra::ggMarginal(p1, type = "densigram", size =6, colour="grey", bins=50)
 p11
-pdf("Chrom_plasmid_PPI_main.pdf", width=6, height=6, bg="white")
+pdf("Figure_4_Chrom_plasmid_PPI_main.pdf", width=6, height=6, bg="white")
 ggarrange(p11, ncol=1, nrow=1)
 dev.off()
 
