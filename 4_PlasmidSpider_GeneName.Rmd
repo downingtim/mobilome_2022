@@ -617,12 +617,12 @@ write.xlsx(Plasmid_PPI_data, "Key_Results_Figures/Table_S3_new.xlsx")
 
 for (k in 1:length(Plasmid_PPI_data$Sample)){
   print(k)
-  for (i in 1:length(fullPMNLE$Sample)){
+  for (i in 1:length(fullPMNLE$STRING.bacteria.name)){
     Plasmid_PPI_data[k,]$Sample <- sub("\\_$", "", Plasmid_PPI_data[k,]$Sample) # remove trailing _ 
     if(fullPMNLE$STRING.bacteria.name[i] == Plasmid_PPI_data[k,]$Sample){    
        Plasmid_PPI_data[k,12] <- fullPMNLE$aPMNLE_all[i]
        Plasmid_PPI_data[k,13] <- fullPMNLE$cTri_all[i]
-       Plasmid_PPI_data[k,15] <-fullPMNLE$ccs_all[i] } } # end for
+       Plasmid_PPI_data[k,15] <- fullPMNLE$ccs_all[i] } } # end for
 } # end for - two loops to avoid memory issues
 
 View(Plasmid_PPI_data) # not pretty code but it works
