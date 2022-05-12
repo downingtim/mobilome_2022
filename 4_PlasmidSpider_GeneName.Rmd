@@ -3,19 +3,20 @@ title: "Plasmid-related gene & PPI main analysis"
 ---
 
 ```{r setup, include=FALSE}
-# Potential input files [1] - [17] read from the local folder
+# Potential input files [1] - [16] read from the local folder
 # There are 17 listed, only number [1] is essential
 # 
 # all_PPIs_4377.tar -> 4,377 samples' CSV files for all proteins showing the
 # index, gene name (Gene), plasmid status (Plasmid, where 0=plasmid-related),
 # and total number of PPIs (Interactions) - for each sample
-
+# 
 # [1]  stringInput.csv = the species, proteins & String_ID - get it from
 #      Figshare doi: https://doi.org/10.6084/m9.figshare.19674027.v1
 # [2]  plasmidGenesTable.i.csv for i=0 to i=23 inclusive, containing the matrix 
 #      of all 9,172 plasmid-related genes across the 4,445 samples - don't try
 #      to run this unless you have a long time to wait for it to work - each has
 #      partial data that is amalgamated together for the final correct matrix
+#      because it was too difficult to run it all together, try with caution
 # [3]  plasmidGenesTable2.csv = the final version of [2]
 # [4]  GeneName_presence.csv = 4,445 samples with their, stringID, CorrectNames,
 #      and LongNames to test for gene name length
@@ -23,17 +24,15 @@ title: "Plasmid-related gene & PPI main analysis"
 # [6]  Gene_rates_4393.csv = rates of plasmid & chrom genes for 4,393 samples -
 #      this is not essential, the code with generate this.
 # [7]  Plasmid_PPI.xlsx = 4,377 samples' plasmid & chromosomal PPI rates
-# [8]  Plasmid_PPI_data_PMNLE_corrected2.csv = 4,377 samples with their String ID,
+# [8]  Plasmid_PPI_data_PMNLE.csv = 4,377 samples with their String ID,
 #      chromosomal aPMNLE, chromosomal cThreshold, chromosomal cTriangles, 
 #      chromosomal cEdges, chromosomal cVertices, chromosomal cNonTrivialLoops,
 #      and chromosomal cConnectedComponents
-# [9]  approximatePMNLE_Feb2022_v2.xlsx = like [8] but with 4,445 samples shown
-#      where some contain no relevant data
-# [10] approximatePMNLE_all.xlsx = like [8] but with 4,422 samples shown
-#      where some contain no relevant data
-# [11] approximatePMNLEmodified.xlsx  = like [8] but with 4,422 samples shown
-#      where some contain no relevant data
-# [12] Table_S3.xlsx = 4,377 samples with the plasmid-related 
+# [9]  approximatePMNLE_purely_chromosomal.csv = like [8] but with 4,445 samples
+#      shown where some contain no relevant data (chromosomal PPIs)
+# [10] approximatePMNLE_fullPPIN.csv = like [8] but with 4,422 samples shown
+#      where some contain no relevant data (for all PPIs)
+# [11] Table_S3.xlsx = 4,377 samples with the plasmid-related 
 #      PPIs (Plasmid_PPI), chromosomal PPIs (Chrom_PPI), fraction of PPIs that 
 #      were plasmid-related (Fraction), numbers of proteins per sample
 #      (inputProteins), number of PPIs (interactions), number of plasmid genes
@@ -42,18 +41,18 @@ title: "Plasmid-related gene & PPI main analysis"
 #      all proteins aPMNLE (aPMNLE_all), all proteins trios (cTri_all), all 
 #      proteins indirect loops (loops_all), and all proteins connected components
 #      (ccs_all)
-# [13] OUTPUT7 -> points to chromosomal_PPIs_4377.tar.gz -> 4,377 samples' CSV
+# [12] OUTPUT7 -> points to chromosomal_PPIs_4377.tar.gz -> 4,377 samples' CSV
 #      files for all proteins showing the index, the String IDs for the protein
 #      pairs, combined score, the short String IDs for the protein pairs and
 #      number of chromosomal PPIs (c) - for each sample - see it at 
 #   https://drive.google.com/file/d/1gTOucAvkuqDaS14ah7Xzt4Q_CcWdMV4C/view?usp=sharing
-# [14] Data_for_Fig_S7_metasamples.csv = metasamples from NMF on plasmid gene
+# [13] Data_for_Fig_S7_metasamples.csv = metasamples from NMF on plasmid gene
 #      presence-absence matrix
-# [15] Data_for_Fig_S11_metasamples.interactions.all.csv = mixture gene
+# [14] Data_for_Fig_S11_metasamples.interactions.all.csv = mixture gene
 #      coefficients from NMF on plasmid gene presence-absence matrix
-# [16] Data_for_Fig_S8_mixture_coefficients.interactions.all.csv = metasamples
+# [15] Data_for_Fig_S8_mixture_coefficients.interactions.all.csv = metasamples
 #      from NMF on plasmid gene PPI rates matrix
-# [17] Data_for_Fig_S12_mixture_coefficients.interactions.all.csv = mixture 
+# [16] Data_for_Fig_S12_mixture_coefficients.interactions.all.csv = mixture 
 #      gene coefficients from NMF on plasmid gene PPI rates matrix
 
 
@@ -342,6 +341,7 @@ for (k in 1:length(list.files(pattern = "\\.csv$"))){ # read in 4,393 files
      Gene_rates$Chrom_genes[k] <- length(subset(in2, Plasmid==0)$Gene)
      } # end for
 # write.csv(Gene_rates, "../Gene_rates_4393.csv")
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/RMD_FILES")
 Gene_rates <- read.csv("../Gene_rates_4393.csv")
 Gene_rates <- Gene_rates[,-c(1)]
 str(Gene_rates) # 4393 samples 
@@ -350,14 +350,14 @@ hist(Gene_rates$Chrom_genes, breaks=69) + grid()
 plot(Gene_rates$Plasmid_genes, Gene_rates$Chrom_genes, cex=0.1) + grid()
 
 setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/RMD_FILES")
-Plasmid_PPI_data <- read.xlsx("Plasmid_PPI.xlsx") # , sheetIndex = 1)
+Plasmid_PPI_data <- read.xlsx("Plasmid_PPI.xlsx" , sheetIndex = 1)
 str(Plasmid_PPI_data) # 4377 samples of their plasmid PPI rates
         # Sample, Plasmid_PPI, Chrom_PPI, Fraction
 Plasmid_PPI_data$inputProteins <- c(0)
 Plasmid_PPI_data$interactions  <- c(0)
 Plasmid_PPI_data$Plasmid_genes <- c(0)
 
-Final_Table <- read.xlsx("FinalTable.xlsx") # , sheetIndex=1) # ok
+Final_Table <- read.xlsx("FinalTable.xlsx" , sheetIndex=1) # ok
 str(Final_Table) # 4377 obs. of  6 variables:
 # get inputProteins in column 5 and interactions in column 6
 
@@ -392,13 +392,13 @@ subset(Plasmid_PPI_data, inputProteins < 1 & Plasmid_genes >0)
 ########################################################################
 
 # Full aPMNLE
-setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/")
-fullPMNLE <- data.frame(read.csv("Plasmid_PPI_data_PMNLE_corrected2.csv"))
-str(fullPMNLE) # 4377 obs. of  15 variables:
-        # X1, STRING.bacteria.name, aPMNLE, cThreshold, cTriangles, cEdges
-        # cVertices, cNonTrivialLoops, cConnectedComponents
-        # add plasmid_output into Final_Table where species match
-# fullPMNLE is not correct
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/RMDFILES/")
+fullPMNLE <- data.frame(read.csv("Plasmid_PPI_data_PMNLE.csv"))
+colnames(fullPMNLE)[2] <- "STRING.bacteria.name"
+colnames(fullPMNLE)[9] <- "cTriangles"
+colnames(fullPMNLE)[10] <- "cNonTrivialLoops"
+colnames(fullPMNLE)[11] <- "cConnectedComponents"
+str(fullPMNLE) # 4377 obs. of  16 variables
 
 for (i in 1:length(fullPMNLE$STRING.bacteria.name)){
   fullPMNLE$cTriangles[i] <- str_remove(fullPMNLE$cTriangles[i], "c\\(")
@@ -419,9 +419,8 @@ for (i in 1:length(fullPMNLE$cConnectedComponents)){
 } # Full aPMNLE
 View(fullPMNLE) # Full aPMNLE
 
-setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/")
-fullPMNLE_new <- data.frame(read.csv("Plasmid_PPI_data_PMNLE_corrected2.csv"))
-str(fullPMNLE_new) # 4377 obs. of  15 variables:
+fullPMNLE_new <- data.frame(read.csv("Plasmid_PPI_data_PMNLE.csv"))
+str(fullPMNLE_new) # 4377 obs. of  16 variables
 
 # check
 
@@ -432,7 +431,7 @@ length(subset(fullPMNLE_new, Plasmid_PPI < 1)$Plasmid_PPI)
 summary(subset(fullPMNLE_new, Plasmid_PPI > 0)$Plasmid_PPI)
 #    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
   # 5981   28484   40368   47358   58903  373497 
-sd(subset(fullPMNLE_new, Plasmid_PPI > 0)$Plasmid_PPI)
+sd(subset(fullPMNLE_new, Plasmid_PPI > 0)$Plasmid_PPI) # 28940.59
 summary(subset(fullPMNLE_new, Plasmid_PPI > 0)$Chrom_PPI)
  # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
  #      1    1426    3244    5331    6716   60555 
@@ -440,44 +439,16 @@ sd(subset(fullPMNLE_new, Plasmid_PPI > 0)$Chrom_PPI)
 summary(subset(fullPMNLE_new, Plasmid_PPI > 0)$Fraction)
 sd(subset(fullPMNLE_new, Plasmid_PPI > 0)$Fraction)
 
-png("FigS10_Triangles_distribution_full.png", width=500, height=600, units="px")
-hist(log10(as.numeric(fullPMNLE_new$cTri)), breaks=123, col="grey",
-     xlab="Log10-scaled numbers of all protein trios", main="", cex=1.2,
-     cex.axis=1.4) + grid()
-dev.off()
-png("FigS11_Loops_distribution_full.png", width=500, height=600, units="px")
-hist(log10(as.numeric(fullPMNLE_new$loops)), breaks=123, col="grey",
-     xlab="Log10-scaled numbers of all indirect connections", main="",
-     cex=1.2, cex.axis=1.4) + grid()
-dev.off()
-png("FigS12_Components_distribution_full.png", width=500, height=600, units="px")
-hist(log10(fullPMNLE_new$ccs), breaks=123, col="grey",
-     xlab="PPI network components - all genes", main="", cex=1.2,
-     cex.axis=1.4) + grid()
-dev.off()
-
-cor.test(as.numeric(fullPMNLE_new$loops), fullPMNLE_new$aPMNLE)[4]
-cor.test(as.numeric(fullPMNLE_new$loops), fullPMNLE_new$aPMNLE)[3]
-cor.test(as.numeric(fullPMNLE_new$loops), fullPMNLE_new$aPMNLE)$conf.int[1:2]
-# Loops: r=0.337 r2=0.114 raw p=2.568624e-113 95% CI 0.31 0.36 # p value 1
-pvalues <- c(2.568624e-113)
-
-cor.test(as.numeric(fullPMNLE_new$ccs), fullPMNLE_new$aPMNLE)[4]
-cor.test(as.numeric(fullPMNLE_new$ccs), fullPMNLE_new$aPMNLE)[3]
-cor.test(as.numeric(fullPMNLE_new$ccs), fullPMNLE_new$aPMNLE)$conf.int[1:2]
-# Connected Components: r=-0.191 r2=0.001 raw p=4.585766e-36 95% CI -0.22 -0.16
-pvalues <- c(4.585766e-36, pvalues) # p value 2
-
-
 ########################################################################
 ########### Examine chromosomal proteins' aPMNLE, again not useful # ####
 ########################################################################
 
 # Chrom aPMNLE
 setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021")
-approximatePMNLE <- data.frame(read.xlsx("approximatePMNLE_Feb2022_v2.xlsx", sheetIndex=1))
-str(approximatePMNLE) # 4445 obs. of  5 variables:
-        # X1, STRING.bacteria.name, aPMNLE, cThreshold, cTriangles, cEdges
+#approximatePMNLE <- data.frame(read.xlsx("approximatePMNLE_Feb2022.xlsx", sheetIndex=1))
+approximatePMNLE <- data.frame(read.csv("approximatePMNLE_purely_chromosomal.csv"))
+str(approximatePMNLE) # 4423 obs. of  5 variables:
+        # X, STRING.bacteria.name, aPMNLE, cThreshold, cTriangles, cEdges
         # cVertices, cNonTrivialLoops, cConnectedComponents
         # add plasmid_output into Final_Table where species match
 
@@ -500,28 +471,29 @@ for (i in 1:length(approximatePMNLE$cConnectedComponents)){
 } # Chrom aPMNLE
 View(approximatePMNLE) # Chrom aPMNLE
 
-png("FigS10_Triangles_distribution_chrom.png", width=500, height=600, units="px")
+png("FigS_Triangles_distribution_chrom.png", width=500, height=600, units="px")
 hist(log10(as.numeric(approximatePMNLE$cTri)), breaks=123, col="grey",
      xlab="Log10-scaled numbers of chromosomal protein trios", main="", cex=1.2,
      cex.axis=1.4) + grid()
 dev.off()
-png("FigS11_Loops_distribution_chrom.png", width=500, height=600, units="px")
+png("FigS_Loops_distribution_chrom.png", width=500, height=600, units="px")
 hist(log10(as.numeric(approximatePMNLE$loops)), breaks=123, col="grey",
      xlab="Log10-scaled numbers of chromosomal indirect connections", main="",
      cex=1.2, cex.axis=1.4) + grid()
 dev.off()
-png("FigS12_Components_distribution_chrom.png", width=500, height=600, units="px")
+png("FigS_Components_distribution_chrom.png", width=500, height=600, units="px")
 hist(log10(approximatePMNLE$ccs), breaks=123, col="grey",
      xlab="PPI network components - chromosomal genes", main="", cex=1.2,
      cex.axis=1.4) + grid()
 dev.off()
 
 #################################################################
-# Chrom aPMNLE
+# Full aPMNLE
 setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021")
-approximatePMNLE_all <- data.frame(read.xlsx("approximatePMNLE_all.xlsx", sheetIndex=1))
-str(approximatePMNLE_all) # 4422 obs. of  5 variables:
-# X1 ID	STRING.bacteria.name	aPMNLE	cThreshold	cTriangles	cEdges	cVertices
+# approximatePMNLE_all <- data.frame(read.xlsx("approximatePMNLE_all.xlsx", sheetIndex=1))
+approximatePMNLE_all <- data.frame(read.csv("approximatePMNLE_fullPPIN.csv"))
+str(approximatePMNLE_all) # 4423 obs. of  9 variables:
+# X	STRING.bacteria.name	aPMNLE	cThreshold	cTriangles	cEdges	cVertices
 # cNonTrivialLoops	cConnectedComponents
         # add plasmid_output into Final_Table where species match
 
@@ -529,56 +501,68 @@ for (i in 1:length(approximatePMNLE_all$STRING.bacteria.name)){
   approximatePMNLE_all$cTriangles[i] <- str_remove(approximatePMNLE_all$cTriangles[i], "c\\(")
   approximatePMNLE_all$cTriangles[i] <- str_remove(approximatePMNLE_all$cTriangles[i], "\\)")
   approximatePMNLE_all$cTri[i] <- as.numeric(tail(unlist(strsplit(approximatePMNLE_all$cTriangles[i], ",")), n=1))
-} # All aPMNLE
+} # Full aPMNLE
 
 for (i in 1:length(approximatePMNLE_all$cNonTrivialLoops)){
   approximatePMNLE_all$cNonTrivialLoops[i] <- str_remove(approximatePMNLE_all$cNonTrivialLoops[i], "c\\(")
   approximatePMNLE_all$cNonTrivialLoops[i] <- str_remove(approximatePMNLE_all$cNonTrivialLoops[i], "\\)")
   approximatePMNLE_all$loops[i] <- as.numeric(tail(unlist(strsplit(approximatePMNLE_all$cNonTrivialLoops[i], ",")), n=1))
-} # All aPMNLE
+} # Full aPMNLE
 
 for (i in 1:length(approximatePMNLE_all$cConnectedComponents)){
   approximatePMNLE_all$cConnectedComponents[i] <- str_remove(approximatePMNLE_all$cConnectedComponents[i], "c\\(")
   approximatePMNLE_all$cConnectedComponents[i] <- str_remove(approximatePMNLE_all$cConnectedComponents[i], "\\)")
   approximatePMNLE_all$ccs[i] <- as.numeric(tail(unlist(strsplit(approximatePMNLE_all$cConnectedComponents[i], ",")), n=1))
-} # All aPMNLE
-View(approximatePMNLE_all) # All aPMNLE
+} # Full aPMNLE
+View(approximatePMNLE_all) # Full aPMNLE
 
-png("FigS10_Triangles_distribution_all.png", width=500, height=600, units="px")
+png("FigS_Triangles_distribution_all.png", width=500, height=600, units="px")
 hist(log10(as.numeric(approximatePMNLE_all$cTri)), breaks=123, col="grey",
      xlab="Log10-scaled numbers of all protein trios", main="", cex=1.2,
      cex.axis=1.4) + grid()
 dev.off()
-png("FigS11_Loops_distribution_all.png", width=500, height=600, units="px")
+png("FigS_Loops_distribution_all.png", width=500, height=600, units="px")
 hist(log10(as.numeric(approximatePMNLE_all$loops)), breaks=123, col="grey",
      xlab="Log10-scaled numbers of all indirect connections", main="",
      cex=1.2, cex.axis=1.4) + grid()
 dev.off()
-png("FigS12_Components_distribution_all.png", width=500, height=600, units="px")
+png("FigS_Components_distribution_all.png", width=500, height=600, units="px")
 hist(log10(approximatePMNLE_all$ccs), breaks=123, col="grey",
      xlab="PPI network components - all genes", main="", cex=1.2,
      cex.axis=1.4) + grid()
 dev.off()
 
+cor.test(as.numeric(approximatePMNLE_all$loops), approximatePMNLE_all$aPMNLE)[4]
+cor.test(as.numeric(approximatePMNLE_all$loops), approximatePMNLE_all$aPMNLE)[3]
+cor.test(as.numeric(approximatePMNLE_all$loops), approximatePMNLE_all$aPMNLE)$conf.int[1:2]
+# Loops: r=0.225 raw p=1.1e-51 95% CI 0.20 0.25 # p value 1
+pvalues <- c(1.1e-51, pvalues)
+
+cor.test(as.numeric(approximatePMNLE_all$ccs), approximatePMNLE_all$aPMNLE)[4]
+cor.test(as.numeric(approximatePMNLE_all$ccs), approximatePMNLE_all$aPMNLE)[3]
+cor.test(as.numeric(approximatePMNLE_all$ccs), approximatePMNLE_all$aPMNLE)$conf.int[1:2]
+# Connected Components: r=-0.02455  raw p=0.10 95% CI -0.05 -0.01
+pvalues <- c(0.10, pvalues) # p value 2
+
 ######
 
 setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021")
 # write.xlsx(approximatePMNLE, "approximatePMNLE_modified.xlsx")
-approximatePMNLE <- read.xlsx("approximatePMNLEmodified.xlsx")   # Chrom aPMNLE
+# approximatePMNLE <- read.xlsx("approximatePMNLEmodified.xlsx")   # Chrom aPMNLE
 approximatePMNLE$cTri <- as.numeric(approximatePMNLE$cTri)
 str(approximatePMNLE)
 
 cor.test(as.numeric(approximatePMNLE$loops), approximatePMNLE$aPMNLE)[4]
 cor.test(as.numeric(approximatePMNLE$loops), approximatePMNLE$aPMNLE)[3]
 cor.test(as.numeric(approximatePMNLE$loops), approximatePMNLE$aPMNLE)$conf.int[1:2]
-# Loops: r=0.352 r2=0.124 raw p=1.53e-128 95% CI 0.33 0.38
-pvalues <- c(1.53e-12, pvalues) # p value 3
+# Loops: r=0.351 raw p=5e-127 95% CI 0.335 0.377
+pvalues <- c(5e-127, pvalues) # p value 3
 
 cor.test(as.numeric(approximatePMNLE$ccs), approximatePMNLE$aPMNLE)[4]
 cor.test(as.numeric(approximatePMNLE$ccs), approximatePMNLE$aPMNLE)[3]
 cor.test(as.numeric(approximatePMNLE$ccs), approximatePMNLE$aPMNLE)$conf.int[1:2]
-# Connected Components: r=-0.200 r2=0.040 raw p=4.65e-41 95% CI -0.23 -0.17
-pvalues <- c(4.65e-41, pvalues) # p value 4
+# Connected Components: r=-0.201 raw p=4e-41 95% CI -0.23 -0.17
+pvalues <- c(4e-41, pvalues) # p value 4
 
 ########################################################################
 ########### Compile final info from aPMNLEs for Table S3 ###############
@@ -602,7 +586,8 @@ colnames(Plasmid_PPI_data)[14] <- c("loops_all")
 Plasmid_PPI_data$ccsPlasmid_PPI_data <- rep(0, 4377)
 colnames(Plasmid_PPI_data)[15] <- c("ccs_all")
 
-Plasmid_PPI_data <- read.xlsx("Key_Results_Figures/Table_S3.xlsx")
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021")
+Plasmid_PPI_data <- read.xlsx("Key_Results_Figures/Table_S3.xlsx", sheetIndex = 1)
 Plasmid_PPI_data$cTri <- as.numeric(Plasmid_PPI_data$cTri)
 Plasmid_PPI_data$cTri_all <- as.numeric(Plasmid_PPI_data$cTri_all)
 str(Plasmid_PPI_data)
@@ -610,10 +595,10 @@ str(Plasmid_PPI_data)
 library(stringr)
 for (k in 1:length(Plasmid_PPI_data$Sample)){
   print(k)
-  for (i in 1:length(approximatePMNLE$STRINGbacterianame)){ # 
+  for (i in 1:length(approximatePMNLE$STRING.bacteria.name)){ # 
     Plasmid_PPI_data[k,]$Sample <- sub("\\_$", "", Plasmid_PPI_data[k,]$Sample) # remove trailing _  # "Escherichia_coli_O157_H7_str_EDL933"
     
-    if(approximatePMNLE$STRINGbacterianame[i] == Plasmid_PPI_data[k,]$Sample){    
+    if(approximatePMNLE$STRING.bacteria.name[i] == Plasmid_PPI_data[k,]$Sample){    
        Plasmid_PPI_data[k,8] <- approximatePMNLE$aPMNLE[i]
        Plasmid_PPI_data[k,9] <- approximatePMNLE$cTri[i]
        Plasmid_PPI_data[k,10] <-approximatePMNLE$loops[i]
@@ -628,21 +613,20 @@ Plasmid_PPI_data$Plasmid_genes[is.na(Plasmid_PPI_data$Plasmid_genes)] <- 0
 #subset(Plasmid_PPI_data, inputProteins==0 | is.na(inputProteins))
 
 View(Plasmid_PPI_data) # not pretty code but it works
-write.xlsx(Plasmid_PPI_data, "Key_Results_Figures/Table_S3.xlsx")
+write.xlsx(Plasmid_PPI_data, "Key_Results_Figures/Table_S3_new.xlsx")
 
 for (k in 1:length(Plasmid_PPI_data$Sample)){
   print(k)
   for (i in 1:length(fullPMNLE$Sample)){
     Plasmid_PPI_data[k,]$Sample <- sub("\\_$", "", Plasmid_PPI_data[k,]$Sample) # remove trailing _ 
-    if(fullPMNLE$Sample[i] == Plasmid_PPI_data[k,]$Sample){    
+    if(fullPMNLE$STRING.bacteria.name[i] == Plasmid_PPI_data[k,]$Sample){    
        Plasmid_PPI_data[k,12] <- fullPMNLE$aPMNLE_all[i]
        Plasmid_PPI_data[k,13] <- fullPMNLE$cTri_all[i]
-       Plasmid_PPI_data[k,14] <-fullPMNLE$loops_all[i]
        Plasmid_PPI_data[k,15] <-fullPMNLE$ccs_all[i] } } # end for
 } # end for - two loops to avoid memory issues
 
 View(Plasmid_PPI_data) # not pretty code but it works
-write.xlsx(Plasmid_PPI_data, "Key_Results_Figures/Table_S3.xlsx")
+write.xlsx(Plasmid_PPI_data, "Key_Results_Figures/Table_S3_new.xlsx")
 
 ########################################################################
 ########### Examine change in aPMNLE for chrom vs all, not useful # ####
@@ -657,6 +641,8 @@ str(Plasmid_PPI_data$diffPMNLE) # 4422 - 126 samples = 4,398 samples
 #     Min.   1st Qu.    Median      Mean   3rd Qu.      Max.      NA's 
 # -0.152 -0.0092  0.000000  0.0155  0.026  0.76       136 
 subset(Plasmid_PPI_data, Plasmid_PPI_data$diffPMNLE > 0.5)[c(1:3,10:13)]
+sum(is.na(Plasmid_PPI_data$aPMNLE) ) #190 NAs
+sum(!(is.na(Plasmid_PPI_data$aPMNLE) ))#4187 not NAs
 
 png("Fig_S19_PMNLE_distribution_all.png", width=600, height=1200, units="px")
 par(mfrow=c(3,1))
@@ -668,12 +654,12 @@ hist(Plasmid_PPI_data$diffPMNLE, breaks=123, xlab="Change in PMNLE values",
      main="", cex=1.8, col="green", cex.axis=1.5, cex.lab=1.5) + grid()
 dev.off()
 
-Plasmid_PPI_data <- read.xlsx("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/Key_Results_Figures/Table_S3.xlsx")
+# Plasmid_PPI_data <- read.xlsx("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/Key_Results_Figures/Table_S3.xlsx")
 dim(Plasmid_PPI_data) # 4,377
 # length(subset(fullPMNLE_new, Plasmid_PPI <1 | aPMNLE_all < 0.0001)$loops)
 
 setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/RMD_FILES")
-Plasmid_PPI_data_new <- read.xlsx("FinalTable.xlsx")
+Plasmid_PPI_data_new <- read.xlsx("FinalTable.xlsx", sheetIndex = 1)
 str(Plasmid_PPI_data_new) # 4377 obs. of  7 variables
 
 Plasmid_PPI_dat2 <- subset(Plasmid_PPI_data, aPMNLE_all > 0.4 & Plasmid_PPI > 0)
@@ -684,7 +670,7 @@ length(subset(Plasmid_PPI_data, aPMNLE_all > 0)$Sample)# 4,103 samples
 # A further 212 had no aPMNLE data
 dim(Plasmid_PPI_dat2) # 2,934 samples
 Plasmid_PPI_dat3 <- Plasmid_PPI_dat2
-dim(Plasmid_PPI_dat3)
+dim(Plasmid_PPI_dat3) # 2934   16
 
 # Association of chrom PMNLE with numbers of plasmid-related PPIs
 plot(log10(Plasmid_PPI_dat2$Plasmid_PPI), Plasmid_PPI_dat2$aPMNLE) + grid()
@@ -692,8 +678,8 @@ abline(lm(Plasmid_PPI_dat2$aPMNLE ~ log10(Plasmid_PPI_dat2$Plasmid_PPI)), col="r
 cor(log10(Plasmid_PPI_dat2$Plasmid_PPI), Plasmid_PPI_dat2$aPMNLE)**2
 cor.test(log10(Plasmid_PPI_dat2$Plasmid_PPI), Plasmid_PPI_dat2$aPMNLE)[3]
 cor.test(log10(Plasmid_PPI_dat2$Plasmid_PPI), Plasmid_PPI_dat2$aPMNLE)$conf.int[1:2]
-# Plasmid_PPI r=0.50 r2=0.25 p=2.542212e-185 95% CI = 0.47 to 0.53
-pvalues <- c(2.542212e-185, pvalues) # p value 5
+# Plasmid_PPI r=0.50 p=2.3e-184 95% CI = 0.47 to 0.53
+pvalues <- c(2.3e-184, pvalues) # p value 5
 
 # Association of full PMNLE with numbers of plasmid-related PPIs
 plot(log10(Plasmid_PPI_dat2$Plasmid_PPI), Plasmid_PPI_dat2$aPMNLE_all) + grid()
@@ -701,8 +687,8 @@ abline(lm(Plasmid_PPI_dat2$aPMNLE_all ~ log10(Plasmid_PPI_dat2$Plasmid_PPI)), co
 cor(log10(Plasmid_PPI_dat2$Plasmid_PPI), Plasmid_PPI_dat2$aPMNLE_all)
 cor.test(log10(Plasmid_PPI_dat2$Plasmid_PPI), Plasmid_PPI_dat2$aPMNLE_all)[3]
 cor.test(log10(Plasmid_PPI_dat2$Plasmid_PPI), Plasmid_PPI_dat2$aPMNLE_all)$conf.int[1:2]
-# Plasmid_PPI r=0.30 r2=0.09 p=2.542212e-185 95% CI = 0.26 to 0.33
-pvalues <- c(2.542212e-185, pvalues) # p value 6
+# Plasmid_PPI r=0.30 p=8e-61 95% CI = 0.26 to 0.33
+pvalues <- c(8e-61, pvalues) # p value 6
 
 # Association of difference in PMNLE with numbers of plasmid-related PPIs
 plot(log10(Plasmid_PPI_dat3$Plasmid_PPI), Plasmid_PPI_dat3$diffPMNLE) + grid()
@@ -710,8 +696,8 @@ abline(lm(Plasmid_PPI_dat3$diffPMNLE ~ log10(Plasmid_PPI_dat3$Plasmid_PPI)), col
 cor(log10(Plasmid_PPI_dat3$Plasmid_PPI), Plasmid_PPI_dat3$diffPMNLE)
 cor.test(log10(Plasmid_PPI_dat3$Plasmid_PPI), Plasmid_PPI_dat3$diffPMNLE)[3]
 cor.test(log10(Plasmid_PPI_dat3$Plasmid_PPI), Plasmid_PPI_dat3$diffPMNLE)$conf.int[1:2]
-# Plasmid_PPI r=-0.411 r2=0.169 p=1.084262e-119 95% CI = -0.44 to -0.38
-pvalues <- c(1.084262e-119, pvalues) # p value 7
+# Plasmid_PPI r=-0.411 r2=0.169 p=1.05e-118 95% CI = -0.44 to -0.38
+pvalues <- c(1.05e-118, pvalues) # p value 7
 
 ########
 # Association of chrom PMNLE with numbers of chrom-related PPIs - weaker
@@ -720,8 +706,8 @@ abline(lm(Plasmid_PPI_dat2$aPMNLE ~ log10(Plasmid_PPI_dat2$Chrom_PPI)), col="gre
 cor(log10(Plasmid_PPI_dat2$Chrom_PPI), Plasmid_PPI_dat2$aPMNLE)**2
 cor.test(Plasmid_PPI_dat2$Chrom_PPI, Plasmid_PPI_dat2$aPMNLE)[3]
 cor.test(Plasmid_PPI_dat2$Chrom_PPI, Plasmid_PPI_dat2$aPMNLE)$conf.int[1:2]
-# Chrom_PPI r=0.477 r2=0.229 p=9.165366e-49 95% CI = 0.23 to 0.30
-pvalues <- c(9.165366e-49, pvalues) # p value 8
+# Chrom_PPI r=0.477  p=2.7e-48 95% CI = 0.23 to 0.30
+pvalues <- c(2.7e-48, pvalues) # p value 8
 
 # Association of full PMNLE with numbers of all-related PPIs - weaker
 plot(log10(Plasmid_PPI_dat2$Chrom_PPI), Plasmid_PPI_dat2$aPMNLE_all) + grid()
@@ -729,7 +715,7 @@ abline(lm(Plasmid_PPI_dat2$aPMNLE_all ~ log10(Plasmid_PPI_dat2$Chrom_PPI)), col=
 cor(log10(Plasmid_PPI_dat2$Chrom_PPI), Plasmid_PPI_dat2$aPMNLE_all)
 cor.test(Plasmid_PPI_dat2$Chrom_PPI, Plasmid_PPI_dat2$aPMNLE_all)[3]
 cor.test(Plasmid_PPI_dat2$Chrom_PPI, Plasmid_PPI_dat2$aPMNLE_all)$conf.int[1:2]
-# Chrom_PPI r=0.131 r2=0.02 p=9.132868e-11 95% CI = 0.08 to 0.15
+# Chrom_PPI r=0.131 p=9.132868e-11 95% CI = 0.08 to 0.15
 pvalues <- c(9.132868e-11, pvalues) # p value 9
 
 # Association of difference in PMNLE with numbers of chrom-related PPIs
@@ -738,8 +724,8 @@ abline(lm(Plasmid_PPI_dat3$diffPMNLE ~ log10(Plasmid_PPI_dat3$Chrom_PPI)), col="
 cor(log10(Plasmid_PPI_dat3$Chrom_PPI), Plasmid_PPI_dat3$diffPMNLE)**2
 cor.test(log10(Plasmid_PPI_dat3$Chrom_PPI), Plasmid_PPI_dat3$diffPMNLE)[3]
 cor.test(log10(Plasmid_PPI_dat3$Chrom_PPI), Plasmid_PPI_dat3$diffPMNLE)$conf.int[1:2]
-# Chrom_PPI r=-0.469 r2=0.220 p=2.877624e-160 95% CI = -0.50 to -0.44
-pvalues <- c(2.877624e-160, pvalues) # p value 10
+# Chrom_PPI r=-0.469 [p=5.645724e-159 95% CI = -0.50 to -0.44
+pvalues <- c(5.645724e-159, pvalues) # p value 10
 
 # ########
 # Key obvious finding
@@ -758,7 +744,7 @@ abline(lm(Plasmid_PPI_dat2$aPMNLE_all ~ log10(Plasmid_PPI_dat2$interactions)),co
 cor(log10(Plasmid_PPI_dat2$interactions), Plasmid_PPI_dat2$aPMNLE_all)
 cor.test(log10(Plasmid_PPI_dat2$interactions), Plasmid_PPI_dat2$aPMNLE_all)[3]
 cor.test(log10(Plasmid_PPI_dat2$interactions), Plasmid_PPI_dat2$aPMNLE_all)$conf.int[1:2]
-# interactions r=0.28 r2=0.08 p=5.771313e-55 95% CI = 0.25 to 0.315
+# interactions r=0.28  p=5.771313e-55 95% CI = 0.25 to 0.315
 pvalues <- c(5.771313e-55, pvalues) # p value 12
 
 # Association of difference in PMNLE with numbers of total PPIs
@@ -767,8 +753,8 @@ abline(lm(Plasmid_PPI_dat3$diffPMNLE ~ log10(Plasmid_PPI_dat3$interactions)), co
 cor(log10(Plasmid_PPI_dat3$interactions), Plasmid_PPI_dat3$diffPMNLE)
 cor.test(log10(Plasmid_PPI_dat3$interactions), Plasmid_PPI_dat3$diffPMNLE)[3]
 cor.test(log10(Plasmid_PPI_dat3$interactions), Plasmid_PPI_dat3$diffPMNLE)$conf.int[1:2]
-# interactions r=-0.43 r2=0.184 p=5.279136e-131 95% CI = -0.46 to -0.40
-pvalues <- c(5.279136e-131, pvalues) # p value 13
+# interactions r=-0.43 r2=0.184 p=6.4-130 95% CI = -0.46 to -0.40
+pvalues <- c(6.4e-130, pvalues) # p value 13
 # # ####
 
 #########################
@@ -1306,24 +1292,24 @@ abline(lm(Plasmid_PPI_dat2$aPMNLE ~ log10(Plasmid_PPI_dat2$inputProteins)),col="
 cor(log10(Plasmid_PPI_dat2$inputProteins), Plasmid_PPI_dat2$aPMNLE)
 cor.test(Plasmid_PPI_dat2$inputProteins, Plasmid_PPI_dat2$aPMNLE)[3]
 cor.test(Plasmid_PPI_dat2$inputProteins, Plasmid_PPI_dat2$aPMNLE)$conf.int[1:2]
-# inputProteins r=0.42 r2=0.18 p=2.505911e-75 95% CI = 0.30 to 0.36
-pvalues <- c(2.505911e-75, pvalues) # p value 14
+# inputProteins r=0.42  p=7.1e-74 95% CI = 0.30 to 0.36
+pvalues <- c(7.1e-74, pvalues) # p value 14
 
 plot(log10(Plasmid_PPI_dat2$inputProteins), Plasmid_PPI_dat2$aPMNLE_all) + grid()
 abline(lm(Plasmid_PPI_dat2$aPMNLE_all ~ log10(Plasmid_PPI_dat2$inputProteins)),col="green")
 cor(log10(Plasmid_PPI_dat2$inputProteins), Plasmid_PPI_dat2$aPMNLE_all)**2
 cor.test(Plasmid_PPI_dat2$inputProteins, Plasmid_PPI_dat2$aPMNLE_all)[3]
 cor.test(Plasmid_PPI_dat2$inputProteins, Plasmid_PPI_dat2$aPMNLE_all)$conf.int[1:2]
-# inputProteins r=0.216 r2=0.05 p=6.181867e-24 95% CI = 0.15 to 0.22
-pvalues <- c(6.181867e-24, pvalues) # p value 15
+# inputProteins r=0.05 p=2.502068e-24 95% CI = 0.15 to 0.22
+pvalues <- c(2.502068e-24, pvalues) # p value 15
 
 plot(log10(Plasmid_PPI_dat3$inputProteins), Plasmid_PPI_dat3$diffPMNLE) + grid()
 abline(lm(Plasmid_PPI_dat3$diffPMNLE ~ log10(Plasmid_PPI_dat3$inputProteins)),col="green")
 cor(log10(Plasmid_PPI_dat3$inputProteins), Plasmid_PPI_dat3$diffPMNLE)
 cor.test(Plasmid_PPI_dat3$inputProteins, Plasmid_PPI_dat3$diffPMNLE)[3]
 cor.test(Plasmid_PPI_dat3$inputProteins, Plasmid_PPI_dat3$diffPMNLE)$conf.int[1:2]
-# inputProteins r=-0.365 r2=0.13 p=1.421257e-51 95% CI = -0.31 to -0.24
-pvalues <- c(1.421257e-51, pvalues) # p value 16
+# inputProteins r=-0.365 p=2.483687e-50 95% CI = -0.30 to -0.24
+pvalues <- c(2.483687e-50, pvalues) # p value 16
 ###################
 #################################################################
 
@@ -1338,19 +1324,19 @@ Plasmid_PPI_dat3$diffPMNLE <-(Plasmid_PPI_dat3$aPMNLE_all -
 hist(Plasmid_PPI_dat3$diffPMNLE, breaks=123, col="grey", main="", 
      xlab="Difference in PMNLE", cex=1.4, cex.axis=1.4,  cex.lab=1.4) + grid()
 summary(Plasmid_PPI_dat3$diffPMNLE)
-sd(Plasmid_PPI_dat3$diffPMNLE) # SD = 0.0704
-#     Min.   1st Qu.    Median      Mean  3rd Qu.  Max 
-#     -0.152   -0.0189    0.007    0.022  0.046  0.763 
+sd(na.omit(Plasmid_PPI_dat3$diffPMNLE)) # SD = 0.0707
+#     Min.   1st Qu.    Median      Mean  3rd Qu.  Max  NAs
+# -0.152193 -0.018983  0.006575  0.021601  0.045784  0.762518        11 
  subset(Plasmid_PPI_dat3, diffPMNLE > 0.5)[c(1:3,10:13)]
 
 str(Plasmid_PPI_dat3)  # 2975 obs. of  16 variables:
-t3 <- subset(Plasmid_PPI_dat3, diffPMNLE >  2*sd(Plasmid_PPI_dat3$diffPMNLE) )
+t3 <- subset(Plasmid_PPI_dat3, diffPMNLE >  2*sd(na.omit(Plasmid_PPI_dat3$diffPMNLE) ))
 # Top 5% of difference in aPMNLE where plasmid has big effect -> lower connectivity
-dim(t3) # 155 samples
+dim(t3) # 154 samples
 View(t3[,c(1:8,12,16)] %>%  mutate_if(is.numeric, round, digits=3))
-write.xlsx(t3, "Table_S4.xlsx")
+write.xlsx(t3, "Table_S6.xlsx")
 
-t4 <- subset(Plasmid_PPI_dat3, diffPMNLE < -2*sd(Plasmid_PPI_dat3$diffPMNLE) )
+t4 <- subset(Plasmid_PPI_dat3, diffPMNLE < -2*sd(na.omit(Plasmid_PPI_dat3$diffPMNLE) ))
 # Top 5% of difference in aPMNLE where plasmid has big effect -> more connections
 dim(t4) # 3 samples
 View(t4[,c(1:8,12,16)] %>%  mutate_if(is.numeric, round, digits=3))
@@ -1358,16 +1344,16 @@ View(t4[,c(1:8,12,16)] %>%  mutate_if(is.numeric, round, digits=3))
 main_set1 <-  Plasmid_PPI_dat3[ !(Plasmid_PPI_dat3$Sample %in% t3$Sample), ]
 main_set2 <-  main_set1[ !(main_set1$Sample %in% t4$Sample), ]
 dim(Plasmid_PPI_dat3)
-dim(main_set2) # 2881
+dim(main_set2) # 2777
 
 # compare groups' features
 par(mfrow=c(5,3))
-pdf("mainset_v_155.pdf", width=6, height=6, bg="white")
+pdf("mainset_v_154.pdf", width=6, height=6, bg="white")
 p_set <- c()
 t_set <- c()
 for (i in 2:16){
    t3[,i] <- as.numeric(t3[,i])
-   ttt <- t.test(as.numeric(t3[,i]), as.numeric(main_set2[,i]))
+   ttt <- t.test(as.numeric(t3[,i]), as.numeric(na.omit(main_set2[,i])))
    print(hist(as.numeric(main_set2[,i]), col=alpha("blue", 0.4), breaks=65,
               xlab=colnames(t3)[i], main=""))
    print(grid())
@@ -1390,10 +1376,10 @@ View(t(output1))
 # compare 
 all_ccs <- subset(main_set2, ccs_all>0 & ccs>0)
 mean((all_ccs$ccs_all - all_ccs$ccs)/all_ccs$ccs_all)
-# 91.74% difference
+# 91.70% difference
 t3_ccs <- subset(t3, ccs_all>0 & ccs>0)
 mean((t3_ccs$ccs_all - t3_ccs$ccs)/t3_ccs$ccs_all)
-# 329.3% difference
+# 330.3% difference
 # 
 
 # Although most showed statistically extreme differences between the 155 and
@@ -1403,7 +1389,7 @@ mean((t3_ccs$ccs_all - t3_ccs$ccs)/t3_ccs$ccs_all)
 
 # compare groups' features
 par(mfrow=c(3,1))
-pdf("mainset_v_155.2.pdf", width=6, height=6, bg="white")
+pdf("mainset_v_154.2.pdf", width=6, height=6, bg="white")
 hist(as.numeric(main_set2[,8]), col=alpha("blue", 0.4), breaks=65,
               xlab="aPMNLE values for all proteins", main="") + grid()
 hist(as.numeric(t3[,8]), col=alpha("red", 0.4), breaks=65, add=T)
@@ -1428,8 +1414,8 @@ abline(lm(t3$aPMNLE ~ t3$aPMNLE_all), col=alpha("red",
       0.4), lty="dotted")
 text(0.466,0.68, paste0("For the main set of ",length(main_set2$Sample)," samples",
                       sep=""), col=alpha("blue",0.7))
-text(0.466,0.64, paste0("r=", round(cor(main_set2$aPMNLE, main_set2$aPMNLE_all),3),
-    " and r2=", round(cor(main_set2$aPMNLE, main_set2$aPMNLE_all)**2,3), sep=""),
+text(0.466,0.64, paste0("r=", round(cor.test(main_set2$aPMNLE, main_set2$aPMNLE_all)$estimate,3),
+    " and r2=", round((cor.test(main_set2$aPMNLE, main_set2$aPMNLE_all)$estimate)**2,3), sep=""),
      col=alpha("blue",0.7))
 text(0.466,0.18, paste0("For the smaller set of ",length(t3$Sample)," samples",
                       sep=""), col=alpha("red",0.7))
@@ -1543,15 +1529,15 @@ hist(Plasmid_PPI_dat3$diffLoops, breaks=123, col="grey", main="", cex.axis=1.4,
 summary(Plasmid_PPI_dat3$diffLoops)
 sd(Plasmid_PPI_dat3$diffLoops) # SD = 0.170
 #     Min.   1st Qu.    Median      Mean   3rd Qu.      Max.      NA's 
-#  0.008857 0.401626 0.510176 0.518688 0.629475 0.998985
+#  0.008857 0.401387 0.510363 0.518547 0.629475 0.998985  18
 
 plot(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffLoops) + grid()
 abline(lm(Plasmid_PPI_dat3$diffLoops ~ Plasmid_PPI_dat3$diffPMNLE), col="red")
 cor(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffLoops)
 cor.test(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffLoops)[3]
 cor.test(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffLoops)$conf.int[1:2]
-# diffPMNLE vs diffLoops r=0.60 r2=0.36 p=5.50e-290 95% CI = 0.58 to 0.62
-pvalues <- c(5.50e-290, pvalues) # p value 17
+# diffPMNLE vs diffLoops r=0.60 p=2.011068e-283 95% CI = 0.58 to 0.62
+pvalues <- c(2.011068e-283, pvalues) # p value 17
 
 # trios
 Plasmid_PPI_dat3$cTri_all <- as.numeric(Plasmid_PPI_dat3$cTri_all)
@@ -1562,15 +1548,14 @@ Plasmid_PPI_dat3$diffTrios <-(Plasmid_PPI_dat3$cTri_all -
 hist(Plasmid_PPI_dat3$diffTrios, breaks=123, col="grey", main="", cex.axis=1.4,
      xlab="Difference in numbers of trios", cex=1.4,  cex.lab=1.4) + grid()
 summary(Plasmid_PPI_dat3$diffTrios)
-sd(Plasmid_PPI_dat3$diffTrios) # SD = 
 #     Min.   1st Qu.    Median      Mean   3rd Qu.      Max.     
-#    0.04    0.62     0.76      0.73      0.86      1.00000
+# -Inf  0.6228  0.7560    -Inf  0.8573  0.9996      13 
 
-plot(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffTrios) + grid()
-abline(lm(Plasmid_PPI_dat3$diffTrios ~ Plasmid_PPI_dat3$diffPMNLE), col="red")
-cor(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffTrios)
-cor.test(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffTrios)[3]
-cor.test(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffTrios)$conf.int[1:2]
+#plot(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffTrios) + grid()
+#abline(lm(Plasmid_PPI_dat3$diffTrios ~ Plasmid_PPI_dat3$diffPMNLE), col="red")
+#cor.test(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffTrios)$estimate
+#cor.test(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffTrios)[3]
+#cor.test(Plasmid_PPI_dat3$diffPMNLE, Plasmid_PPI_dat3$diffTrios)$conf.int[1:2]
 # diffPMNLE vs diffTrios r=0.315 r2=0.10 p=1e-1 95% CI = 0.28 to 0.35
 pvalues <- c(1e-1, pvalues) # p value 18
 
@@ -1581,10 +1566,8 @@ hist(Plasmid_PPI_dat3$diffCcs, breaks=123, col="grey", main="", cex.axis=1.4,
      xlab="Difference in numbers of PPI network components", cex=1.4, 
      cex.lab=1.4) + grid()
 summary(Plasmid_PPI_dat3$diffCcs)
-sd(Plasmid_PPI_dat3$diffCcs) # SD = 
-str(Plasmid_PPI_dat3$diffCcs) # 4422 - 126 samples = 4,398 samples
 #     Min.   1st Qu.    Median      Mean   3rd Qu.      Max.      NA's 
-#       -31     -1.1429  -0.6429    -Inf -0.3684  0.0000 
+#    -Inf -1.1481 -0.6429    -Inf -0.3684  0.0000      11 
 
 Plasmid_PPI_dat4 <- (Plasmid_PPI_dat3 %>% filter_all(all_vars(!is.infinite(.))))
 plot(Plasmid_PPI_dat4$diffPMNLE, Plasmid_PPI_dat4$diffCcs) + grid()
@@ -1592,8 +1575,8 @@ abline(lm(Plasmid_PPI_dat4$diffCcs ~ Plasmid_PPI_dat4$diffPMNLE), col="red")
 cor(Plasmid_PPI_dat4$diffPMNLE, Plasmid_PPI_dat4$diffCcs)**2
 cor.test(Plasmid_PPI_dat4$diffPMNLE, Plasmid_PPI_dat4$diffCcs)[3]
 cor.test(Plasmid_PPI_dat4$diffPMNLE, Plasmid_PPI_dat4$diffCcs)$conf.int[1:2]
-# diffPMNLE vs diffCcs r=-0.425 r2=0.18 p=1.53e-130 95% CI = -0.45 to 0.40
-pvalues <- c(1.53e-130, pvalues) # p value 19
+# diffPMNLE vs diffCcs r=-0.425 p=3.000371e-128 95% CI = -0.45 to 0.40
+pvalues <- c(3.000371e-128, pvalues) # p value 19
 pvalues <- c(2.2e-16, pvalues) # p value 20 from Figure 1
 pvalues <- c(2.2e-16, pvalues) # p value 21 from Figure 3
 data.frame(pvalues, p.adjust(pvalues, method="BH"))
@@ -1749,6 +1732,20 @@ png("Figure_S6_All_PCA.png", width=1311,height=911, bg="white", units="px")
   par(mfrow = c(1, 2))
   multiplot(outall_1, outall_2)
   dev.off()
+
+# fim: new[1:4,2394:2416]  
+# pap: new[1:4,5270:5274]
+# pil: new[1:4,5584:5605]
+write.csv(new[,c(2394:2416,5270:5274, 5584:5605)], "adhesins.csv")
+
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021")
+getppis <- data.frame(read.csv("interactions_table_full.csv"))
+rownames(getppis) <- new3$list.files.pattern.......csv...
+dim(getppis)
+# fim: getppis[1:4,2395:2417] 
+# pap: getppis[1:4,5271:5275]
+# pil: getppis[1:4,5584:5605]
+write.csv(getppis[,c(2395:2417,5271:5275, 5585:5606)], "adhesins.interactions.csv")
 
 ########################################################################
 ########### NMF of plasmid-related genes #####################
