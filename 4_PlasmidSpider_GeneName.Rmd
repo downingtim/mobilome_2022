@@ -6,33 +6,16 @@ title: "Plasmid-related gene & PPI main analysis"
 # Potential input files [1] - [16] read from the local folder
 # There are 17 listed, only number [1] is essential
 # 
-# all_PPIs_4377.tar -> 4,377 samples' CSV files for all proteins showing the
-# index, gene name (Gene), plasmid status (Plasmid, where 0=plasmid-related),
-# and total number of PPIs (Interactions) - for each sample
-# 
 # [1]  stringInput.csv = the species, proteins & String_ID - get it from
 #      Figshare doi: https://doi.org/10.6084/m9.figshare.19674027.v1
-# [2]  plasmidGenesTable.i.csv for i=0 to i=23 inclusive, containing the matrix 
-#      of all 9,172 plasmid-related genes across the 4,445 samples - don't try
-#      to run this unless you have a long time to wait for it to work - each has
-#      partial data that is amalgamated together for the final correct matrix
-#      because it was too difficult to run it all together, try with caution
-# [3]  plasmidGenesTable2.csv = the final version of [2]
-# [4]  GeneName_presence.csv = 4,445 samples with their, stringID, CorrectNames,
-#      and LongNames to test for gene name length
-# [5]  Acinetobacter.xlsx = example data to test the gene name comparison
-# [6]  Gene_rates_4393.csv = rates of plasmid & chrom genes for 4,393 samples -
-#      this is not essential, the code with generate this.
-# [7]  Plasmid_PPI.xlsx = 4,377 samples' plasmid & chromosomal PPI rates
-# [8]  Plasmid_PPI_data_PMNLE.csv = 4,377 samples with their String ID,
-#      chromosomal aPMNLE, chromosomal cThreshold, chromosomal cTriangles, 
-#      chromosomal cEdges, chromosomal cVertices, chromosomal cNonTrivialLoops,
-#      and chromosomal cConnectedComponents
-# [9]  approximatePMNLE_purely_chromosomal.csv = like [8] but with 4,445 samples
-#      shown where some contain no relevant data (chromosomal PPIs)
-# [10] approximatePMNLE_fullPPIN.csv = like [8] but with 4,422 samples shown
-#      where some contain no relevant data (for all PPIs)
-# [11] Table_S3.xlsx = 4,377 samples with the plasmid-related 
+# [2]  OUTPUT7.tar.gz -> 4,363 samples' CSV files for all proteins showing the
+#      index, gene name (Gene), plasmid status (Plasmid, where 0=plasmid-related),
+#      and total number of PPIs (Interactions) - for each sample
+#      Download at https://doi.org/10.6084/m9.figshare.19672527
+# [3]  OUTPUT8.tar.gz -> 4,363 samples' CSV files for all proteins showing the
+#      PPIs, associated genes and StringDB identifiers
+#      Download at shorturl.at/mtFNZ
+# [4]  Table_3_new.xlsx = 4,363 samples' key summary data, with the plasmid-related 
 #      PPIs (Plasmid_PPI), chromosomal PPIs (Chrom_PPI), fraction of PPIs that 
 #      were plasmid-related (Fraction), numbers of proteins per sample
 #      (inputProteins), number of PPIs (interactions), number of plasmid genes
@@ -41,20 +24,14 @@ title: "Plasmid-related gene & PPI main analysis"
 #      all proteins aPMNLE (aPMNLE_all), all proteins trios (cTri_all), all 
 #      proteins indirect loops (loops_all), and all proteins connected components
 #      (ccs_all)
-# [12] OUTPUT7 -> points to chromosomal_PPIs_4377.tar.gz -> 4,377 samples' CSV
-#      files for all proteins showing the index, the String IDs for the protein
-#      pairs, combined score, the short String IDs for the protein pairs and
-#      number of chromosomal PPIs (c) - for each sample - see it at 
-#   https://drive.google.com/file/d/1gTOucAvkuqDaS14ah7Xzt4Q_CcWdMV4C/view?usp=sharing
-# [13] Data_for_Fig_S7_metasamples.csv = metasamples from NMF on plasmid gene
-#      presence-absence matrix
-# [14] Data_for_Fig_S11_metasamples.interactions.all.csv = mixture gene
-#      coefficients from NMF on plasmid gene presence-absence matrix
-# [15] Data_for_Fig_S8_mixture_coefficients.interactions.all.csv = metasamples
-#      from NMF on plasmid gene PPI rates matrix
-# [16] Data_for_Fig_S12_mixture_coefficients.interactions.all.csv = mixture 
-#      gene coefficients from NMF on plasmid gene PPI rates matrix
-
+# [5]  plasmid_list_1.xlsx contains the 16,393 unique plasmids, along with their
+#      accessions, numbers of genes, plasmid name, sample name, strain name,
+#      numbers of unique genes, numbers of CDSs, plasmid length, and list of genes.
+# [6]  uniqueGeneList.csv = the 8,941 unique plasmid-encoded genes
+# [7]  plasmidGenes.new.csv = matrix of 494 samples across 3,023 genes shown as
+#      presence-absence (1 or 0)
+# [8]  plasmidGenes.new.int.csv = matrix of 494 samples across 3,023 proteins 
+#      shown as the number of PPIs per protein
 
 # install.packages("genbankr", ask=F) # v1.0.0
 library(genbankr)
@@ -159,6 +136,7 @@ input$interactions <- rep(0, length(input$Species))
 
 # Need to make new table # real plasmid-associated genes vs samples
 vector1  <- data.frame(read.xlsx("plasmid_list_1.xlsx"))
+str(vector1)
 vector1$Length_bp <- as.numeric(vector1$Length_bp)
 vector1$Genes <- as.numeric(vector1$Genes)
 vector1$CDSs <- as.numeric(vector1$CDSs)
@@ -210,7 +188,7 @@ str(uniqueGeneList) # 16393 obs. of  9 variables
 
 # read in data after having made it already above and exported it
 setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/RMD_FILES")
-new <- data.frame(read.csv("plasmidGenes.new.csv"))  # not useful anymore
+new <- data.frame(read.csv("plasmidGenes.new.csv"))   
 rownames(new) <- new[,1]
 new <- new[-c(1)] # drop unneeded column
 dim(new) # 494 obs. of  3023 variables:
@@ -380,13 +358,13 @@ plot(Gene_rates$Plasmid_genes, Gene_rates$Chrom_genes, cex=0.1) + grid()
 length(subset(Gene_rates, Plasmid_genes>0)$Sample) # 497
 # write.csv(subset(Gene_rates, Plasmid_genes>0)$Sample, "sample_names_497.csv")
 
-Gene_rates <- data.frame(read.csv("Gene_rates_new.csv"))
-Gene_rates <- Gene_rates[,-c(1)]
-str(Gene_rates) # Sample, Plasmid_genes, Chrom_genes
+#Gene_rates <- data.frame(read.csv("Gene_rates_new.csv"))
+#Gene_rates <- Gene_rates[,-c(1)]
+#str(Gene_rates) # Sample, Plasmid_genes, Chrom_genes
 
-sample_names_497 <- data.frame(read.csv("sample_names_497.csv"))
-sample_names_497 <- sample_names_497[,-c(1)]
-str(sample_names_497) # 497 genes with plasmid genes
+#sample_names_497 <- data.frame(read.csv("sample_names_497.csv"))
+#sample_names_497 <- sample_names_497[,-c(1)]
+#str(sample_names_497) # 497 genes with plasmid genes
 
 setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/RMD_FILES")
 # Plasmid_PPI_data <- read.xlsx("Plasmid_PPI.xlsx") # , sheetIndex = 1)
@@ -419,7 +397,7 @@ for (k in 1:length(fullPMNLE$STRING.bacteria.name)){
 
 fullPMNLE$STRING.bacteria.name[4] = "Escherichia_coli_O157H7_str_EDL933"
 fullPMNLE$STRING.bacteria.name[396] = "Staphylococcus_caprae_M23864W1"
-fullPMNLE$STRING.bacteria.name[3232] = "Pseudomonas_sp_URMO17WK12I8"
+fullPMNLE$STRING.bacteria.name[3232] = "Pseudomonas_sp_URMO17WK12I8" # fix names!!
 fullPMNLE[1843,16] <- 1681
 fullPMNLE[1843,2] <- 1681
 fullPMNLE[2938,16] <- 2202
@@ -1923,8 +1901,6 @@ png("../Key_Results_Figures/Figure_S4_All_PCA.png", width=1311,height=911,
   par(mfrow = c(1, 2))
   multiplot(outall_3_3, outall_4_4)
   dev.off()
-  
-  # plasmid-related genes per sample
 
 ########### giant heatmap of plasmid-related genes #####################
 ############ check sorted samples
@@ -2595,7 +2571,7 @@ chromPPIs_Array <- c()
 plasmidchromPPIs_Array <- c()
 plasmidplasmidPPIs_Array <- c()
 
-for (k in 2509:length(names6)){ # check 796-798
+for (k in 1:length(names6)){ # check 796-798
      name <-names6[k]
      print(k)
      try ( in2 <- data.frame(read.csv(name)) )
@@ -2718,16 +2694,7 @@ text(0.25,100, "Excess of PPIs", col=alpha("black",0.7))
 text(0.75,110, "Deficit of PPIs", col=alpha("black",0.7))
 dev.off()
 
-summary(table33$f)
-# Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-# 0.4863  0.8877  0.9127  0.8981  0.9355  0.9627 
-sd(table33$f) # 0.898+-0.069
-summary(table33$fp2)
-# -4.0721  0.9428  0.9796  0.7295  1.0000  1.0000 
-sd(table33$fp2) # 0.730+-0.94
-summary(table33$fq2)
-# -0.66942 -0.12938 -0.04916 -0.10112 -0.01830 -0.00181 
-sd(table33$fq2) # -0.101+-0.130
+##
 
 plasmid_freq <- (table33[,6]/(table33[,6]+table33[,9]))
 hets <- (table33[,3]/(table33[,3]+table33[,4]+table33[,5]))
@@ -2796,14 +2763,6 @@ hist( (table22$plasmidPPIs/table22$plasmidPPIs_genes), breaks=888, col="green",
 dev.off()
  
 # #################################################################
-# RcppML::NMF for large sparse matrices: # doesn't work!!
-# see also rsparse::WRMF
-# https://github.com/zdebruine/RcppML
-# install.packages("RcppML")
-# library(RcppML)
-# model <- RcppML::nmf(plasmidPPI_2, k = 10)
-# str(model)
-#################################################################
 
 # look at interactions per protein per sample and chr/plasmid context
 # Not possible, need more memory
@@ -3074,56 +3033,5 @@ for (i in 1:7){
   print(hist(log10(h_all[,i]), ylim=c(0,2600), breaks=49, xlab=i, main=i))
         grid() }
 dev.off()
-# #################################################################
-# Compare NMF outputs
-
-input4 <- data.frame(read.csv("Data_for_Fig_S11_metasamples.interactions.all.csv"))
-# mixtures gene coefficients from NMF on plasmid gene presence-absence matrix
-length(subset(input4, X6 > 0.01)$X) # 45 samples
-length(subset(input4, X14 > 0.01)$X) # 130 samples
-#length(subset(input4, X14 > 0.01 & X6 > 0.01)$X14) # 15 samples
-
-length(intersect(subset(input2, X6 > 0.01)$X, subset(input4, X6 > 0.01)$X)) 
-# 200 vs 45 => 25 intersection
-25 / (200 + 45 - 25)  # 0.114
-length(intersect(subset(input2, X14 > 0.01)$X, subset(input4, X6 > 0.01)$X)) 
-# 130 vs 45 => 7 intersection
-7 / (130 + 45 - 7)    # 0.042
-length(intersect(subset(input2, X6 > 0.01)$X, subset(input4, X14 > 0.01)$X)) 
-# 200 vs 130 => 42 intersection
-42 / (200 + 130 - 42) # 0.146
-length(intersect(subset(input2, X14 > 0.01)$X, subset(input4, X14 > 0.01)$X)) 
-# 130 vs 130 => 42 intersection
-42 / (130 + 130 - 42) # 0.193
-
-mix2 <- data.frame(read.csv("Data_for_Fig_S8_mixture_coefficients.interactions.all.csv"))
-# metasamples from NMF on plasmid gene PPI rates matrix
-hist(log10(mix2$X6)) + grid()
-length(subset(mix2, X6 > 0.00001)$X6) # 4,004 genes
-length(subset(mix2, X14 > 0.00001)$X14) # 3,639 genes
-length(intersect(subset(mix2, X6 > 0.00001)$X, subset(mix2, X14 > 0.00001)$X)) 
-# 4004 vs 1288 => 2075 intersection
-2075 / (4004 + 1288 - 2075)  # 0.645
-
-mix4 <- data.frame(read.csv("Data_for_Fig_S12_mixture_coefficients.interactions.all.csv"))
-# mixtures gene coefficients from NMF on plasmid gene PPI rates matrix
-hist(log10(mix4$X6)) + grid()
-length(subset(mix4, X6 > 0.00001)$X6) # 1288 genes
-
-length(intersect(subset(mix2, X6 > 0.00001)$X, subset(mix4, X6 > 0.00001)$X)) 
-# 4004 vs 1288 => 748 intersection
-748 / (4004 + 1288 - 748)  # 0.165
-length(intersect(subset(mix2, X14 > 0.00001)$X, subset(mix4, X6 > 0.00001)$X)) 
-# 3639 vs 1288 => 690 intersection
-690 / (3639 + 1288 - 690)  # 0.163
-
-library(xlsx)
-input3 <- read.xlsx("Key_Results_Figures/Table_S3.xlsx", sheetIndex=1)
-str(input3)
-length(subset(input3, Plasmid_genes==0)$Sample) # 1235 have no genes
-length(subset(input3, Plasmid_PPI==0)$Sample) # 1231 have no interactions
-check <- subset(input3, Plasmid_genes==0 & Plasmid_PPI>0) # 11 shit
-View(check)
-View(subset(input3, Plasmid_genes<20 & Plasmid_genes>1 & Plasmid_PPI>0))
 # #################################################################
 ```
