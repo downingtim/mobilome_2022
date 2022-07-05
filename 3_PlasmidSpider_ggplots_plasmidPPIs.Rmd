@@ -78,7 +78,7 @@ summary(dat1$Fraction)
  # 0.2990  0.8790  0.9300  0.9101  0.9610  1.0000
 sd(dat1$Fraction)
 
-pdf("Chrom_plasmid_PPI_basic.pdf", width=5, height=6, bg="white")
+pdf("Chrom_plasmid_PPI_basic.pdf", width=5, height=7, bg="white")
 par(mfrow=c(1,1))
 plot(log10(dat1$Chrom_PPI), log10(dat1$Plasmid_PPI), col="blue", cex=0.1,
      xlab="log10 of the chromosomal PPIs", ylab="log10 of the plasmid PPIs")

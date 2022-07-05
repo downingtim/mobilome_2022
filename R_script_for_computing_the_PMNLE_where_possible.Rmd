@@ -1,0 +1,102 @@
+---
+title: "Get aPMNLE values"
+---
+
+```{r setup, include=FALSE}
+## R script for computing the PMNLE:
+## Execute from /home/arahm/TDA_plasmid_chrom_Ecoli/computation_on_STRING_database
+
+setwd("~/Desktop/") # for chrom_data
+
+bact =  (read.csv("cleaned_PPIN_file_names.txt"))
+str(bact)
+#for (kk in 1:length(bact$Sample)){
+  #   bact$Sample[kk] = gsub("\\.(?=[^.]*\\.)", "", bact$Sample[kk], perl=T)
+  #   bact$Sample[kk] = gsub("\\:", "", bact$Sample[kk], perl=T)
+ #    bact$Sample[kk] = gsub("\\[|\\]", "", bact$Sample[kk], perl=T)
+ #     bact$Sample[kk] = gsub("\'", "", bact$Sample[kk], perl=T)
+ #   bact$Sample[kk] = gsub('_{1}$', '', bact$Sample[kk], perl=T) }
+
+aPMNLE = NULL; STRING.bacteria.name = NULL; cThreshold = NULL;  cTriangles=NULL;
+cEdges = NULL;  cVertices = NULL;  cNonTrivialLoops = NULL; 
+cConnectedComponents = NULL; 
+
+setwd("~/Desktop/OUTPUT8/") # for chrom_data
+
+for (i in 1:nrow(bact)) {
+  name = bact[i,1]
+   name <- as.character(name)
+   name = gsub(" ", "",name)	
+   cleanedName = name
+   cleanedName = gsub(".csv", "",cleanedName)
+   setwd(cleanedName)
+   #     name = gsub("\\.(?=[^.]*\\.)", "", name, perl=T)
+   # name = gsub("\\:", "", name, perl=T)
+   # name = gsub("\\[|\\]", "", name, perl=T)
+   #   name = gsub("\'", "", name, perl=T)
+  # name = gsub('_{1}$', '', name, perl=T) 
+  #   name = gsub("_=_", "_equals_", name, perl=T)
+   # cleanedName = gsub(".csv", "_",  name, perl=T) 
+ #  cleanedName = paste(name, "__chrom_data", sep="")
+   print(i)
+   print(cleanedName) 
+  # setwd(paste("~/Desktop/OUTPUT8/",cleanedName,sep=""))
+   if(file.exists("resultsOnFirstBettiNumber.csv")){
+	topologicalOutcomes = read.csv("resultsOnFirstBettiNumber.csv")
+	attach(topologicalOutcomes)
+
+	NLE <- NonTrivialLoops/Edges
+	selectedThresholds <- c(400,420,440,460,480,500,520,540,560,580,600,620,640,
+	                        660,680,700,720,740,760,780,800,820,840,860,880,900)
+	rnle  <- NULL
+	for (j in 1:(length(selectedThresholds)-5)) {
+  		sixConsecutiveNLEs <- c(NLE[Threshold == selectedThresholds[j]],NLE[Threshold == selectedThresholds[j+1]],NLE[Threshold == selectedThresholds[j+2]],NLE[Threshold == selectedThresholds[j+3]],NLE[Threshold == selectedThresholds[j+4]], NLE[Threshold == selectedThresholds[j+5]])
+  		rnle <- c(rnle, min(sixConsecutiveNLEs) )
+	} 
+	approximatePMNLE <- max(rnle)
+	approximatePMNLE
+	jpeg("Non_trivial_loops_per_edge.jpg", width = 350, height = 350)
+	plot(Threshold[Threshold<901],NLE[Threshold<901], xlab="Combined Score threshold",
+	     ylab="Non-trivial loops per edge")
+	abline(h=approximatePMNLE, col="red")
+	dev.off()
+	entry = paste(Threshold, collapse=",");
+ 	entry = paste("c(",entry,")");
+   	cThreshold = c(cThreshold, entry);
+	entry = paste(Triangles, collapse=",");
+ 	entry = paste("c(",entry,")");
+   	cTriangles = c(cTriangles ,entry);
+	entry = paste(Edges, collapse=",");
+ 	entry = paste("c(",entry,")");
+  	cEdges = c(cEdges, entry);
+	entry = paste(Vertices, collapse=",");
+ 	entry = paste("c(",entry,")");
+   	
+	cVertices = c(cVertices, entry);
+	entry = paste(NonTrivialLoops, collapse=",");
+ 	entry = paste("c(",entry,")");
+   	cNonTrivialLoops = c(cNonTrivialLoops, entry);
+	entry = paste(ConnectedComponents, collapse=",");
+ 	entry = paste("c(",entry,")");
+   	cConnectedComponents = c(cConnectedComponents, entry);
+   	detach(topologicalOutcomes)
+   }  else{
+	   approximatePMNLE = NA
+   	cThreshold = c(cThreshold, paste("aPNA"))
+  	cTriangles = c(cTriangles ,paste("NA"))
+   	cEdges = c(cEdges, paste("NA"))
+   	cVertices = c(cVertices, paste("NA"))
+   	cNonTrivialLoops = c(cNonTrivialLoops, paste("NA"))
+   	cConnectedComponents = c(cConnectedComponents, paste("NA"))  }
+   
+   aPMNLE = c(aPMNLE, approximatePMNLE)
+   cleanedName = gsub("__chrom_data", "",cleanedName)
+   STRING.bacteria.name = c(STRING.bacteria.name, cleanedName)
+   setwd("..")	
+}
+   setwd("..")
+write.csv(data.frame(STRING.bacteria.name, aPMNLE, cThreshold, cTriangles, cEdges,
+                     cVertices, cNonTrivialLoops, cConnectedComponents),
+          file="approximatePMNLE.csv")
+###################################################################################
+```
