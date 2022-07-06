@@ -355,21 +355,14 @@ hist(subset(Gene_rates, Plasmid_genes>0)$Plasmid_genes, breaks=99) + grid()
 hist(log10(Gene_rates$Chrom_genes), breaks=69) + grid()
 plot(Gene_rates$Plasmid_genes, Gene_rates$Chrom_genes, cex=0.1) + grid()
 
-length(subset(Gene_rates, Plasmid_genes>0)$Sample) # 497
-# write.csv(subset(Gene_rates, Plasmid_genes>0)$Sample, "sample_names_497.csv")
+length(subset(Gene_rates, Plasmid_genes>0)$Sample) # 491
 
 #Gene_rates <- data.frame(read.csv("Gene_rates_new.csv"))
 #Gene_rates <- Gene_rates[,-c(1)]
 #str(Gene_rates) # Sample, Plasmid_genes, Chrom_genes
 
-#sample_names_497 <- data.frame(read.csv("sample_names_497.csv"))
-#sample_names_497 <- sample_names_497[,-c(1)]
-#str(sample_names_497) # 497 genes with plasmid genes
-
-setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/RMD_FILES")
-# Plasmid_PPI_data <- read.xlsx("Plasmid_PPI.xlsx") # , sheetIndex = 1)
-Plasmid_PPI_data <- Gene_rates
-Final_Table  <- Gene_rates
+#Plasmid_PPI_data <- Gene_rates
+#Final_Table  <- Gene_rates
 
 #################################################################
 ########################################################################
@@ -486,17 +479,17 @@ for (kk in 1:length(BettiNumber$Sample)){
 View(BettiNumber) # Sample cTri_all	loop_all	ccs_all
 
 setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/")
-sample_names_497 <- data.frame(read.csv("sample_names_497.csv"))
-#sample_names_497 <- sample_names_497[,-c(1)]
-str(sample_names_497) # 497 genes with plasmid genes
+sample_names <- data.frame(read.csv("sample_names.csv"))
+#sample_names <- sample_names[,-c(1)]
+str(sample_names) # 491 genes with plasmid genes
 
-for (kk in 1:length(sample_names_497$Sample)){
-     sample_names_497$Sample[kk] = gsub("\\.(?=[^.]*\\.)", "", sample_names_497$Sample[kk], perl=T)
-     sample_names_497$Sample[kk] = gsub("\\:", "",     sample_names_497$Sample[kk], perl=T)
-     sample_names_497$Sample[kk] = gsub("\\[|\\]", "", sample_names_497$Sample[kk], perl=T)
-     sample_names_497$Sample[kk] = gsub("\'", "",      sample_names_497$Sample[kk], perl=T)
-     sample_names_497$Sample[kk] = gsub("\\.", "",      sample_names_497$Sample[kk], perl=T)
-     sample_names_497$Sample[kk] = gsub('_{1}$', '',   sample_names_497$Sample[kk], perl=T) }
+for (kk in 1:length(sample_names$Sample)){
+     sample_names$Sample[kk] = gsub("\\.(?=[^.]*\\.)", "", sample_names$Sample[kk], perl=T)
+     sample_names$Sample[kk] = gsub("\\:", "",     sample_names$Sample[kk], perl=T)
+     sample_names$Sample[kk] = gsub("\\[|\\]", "", sample_names$Sample[kk], perl=T)
+     sample_names$Sample[kk] = gsub("\'", "",      sample_names$Sample[kk], perl=T)
+     sample_names$Sample[kk] = gsub("\\.", "",      sample_names$Sample[kk], perl=T)
+     sample_names$Sample[kk] = gsub('_{1}$', '',   sample_names$Sample[kk], perl=T) }
 
 setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/RMD_FILES/")
 approximatePMNLE <- data.frame(read.csv("approximatePMNLE.290622.csv"))
@@ -522,8 +515,8 @@ for (k in 1:length(fullPMNLE$STRING.bacteria.name)){
   fullPMNLE$cTri_all[k] <- fullPMNLE$cTri[k]
   fullPMNLE$loops_all[k] <- fullPMNLE$loops[k]
   fullPMNLE$ccs_all[k] <- fullPMNLE$ccs[k]
-  for (kk in 1:length(sample_names_497$Sample)){
-     if(fullPMNLE$STRING.bacteria.name[k] == sample_names_497$Sample[kk]){
+  for (kk in 1:length(sample_names$Sample)){
+     if(fullPMNLE$STRING.bacteria.name[k] == sample_names$Sample[kk]){
         for (kk2 in 1:length(BettiNumber$Sample)){
          if(fullPMNLE$STRING.bacteria.name[k] == BettiNumber$Sample[kk2]){
          fullPMNLE$cTri_all[k] <- BettiNumber$cTri_all[kk2]
@@ -538,8 +531,8 @@ for (k in 1:length(fullPMNLE$STRING.bacteria.name)){
 for (k in 1:length(fullPMNLE$STRING.bacteria.name)){
   print(fullPMNLE$STRING.bacteria.name[k])
   print(k)
-  for (kk in 1:length(sample_names_497$Sample)){
-     if(fullPMNLE$STRING.bacteria.name[k] == sample_names_497$Sample[kk]){
+  for (kk in 1:length(sample_names$Sample)){
+     if(fullPMNLE$STRING.bacteria.name[k] == sample_names$Sample[kk]){
         for (kk3 in 1:length(approximatePMNLE$STRING.bacteria.name)){
          if(fullPMNLE$STRING.bacteria.name[k] == approximatePMNLE$STRING.bacteria.name[kk3]){
          fullPMNLE$aPMNLE_all[k] <- approximatePMNLE$aPMNLE[kk3] } } } # end  approximatePMNLE
@@ -597,9 +590,13 @@ for (i in 1:length(fullPMNLE$ccs_all)){
 
 # Repeat
 # View(fullPMNLE) # Full aPMNLE
-write.csv(fullPMNLE, "Plasmid_PPI_data_PMNLE.csv")
+#write.csv(fullPMNLE, "Plasmid_PPI_data_PMNLE.csv")
 #fullPMNLE <- data.frame(read.csv("Plasmid_PPI_data_PMNLE.csv"))
-str(fullPMNLE) # 4363  
+#str(fullPMNLE) # 4363  
+
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/Key_Results_Figures/")
+fullPMNLE <- data.frame(read.xlsx("Table_S3_new.xlsx")) # , sheetIndex = 1)
+str(fullPMNLE)
 
 length(subset(fullPMNLE, Plasmid_Plasmid_PPI > 0)$Plasmid_Plasmid_PPI) # 283
 summary(subset(fullPMNLE, Plasmid_Plasmid_PPI > 0)$Plasmid_Plasmid_PPI)
@@ -2454,6 +2451,7 @@ table2 <- data.frame(name=character(), plasmidPPIs=numeric(), chromPPIs=numeric(
                      plasmidPPIs_genes=numeric(), chromPPIs_genes=numeric(),
                      plasmidplasmidPPIs=numeric(), plasmidchromPPIs=numeric())
 names5 <- list.files()
+str(names5) # 4413
 plasmidPPIs <- 0
 chromPPIs <- 0
 plasmidPPIs_genes <- 0
@@ -2490,7 +2488,10 @@ table2$chromPPIs_genes <- as.numeric(table2$chromPPIs_genes)
 str(table2)
 
 setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/RMD_FILES/")
-write.csv(table2, "Plasmid_PPI_rates.csv")
+# write.csv(table2, "Plasmid_PPI_rates.csv")
+#table2 <- data.frame(read.csv("Plasmid_PPI_rates.csv"))
+#str(table2)
+str(fullPMNLE)
 
 pdf("Plasmid_Gene_Interaction_Protein_Distribution.pdf", width=10, height=6)
 par(mfrow=c(1,2))
@@ -2510,45 +2511,70 @@ plot( hist.data,   col="blue", add=T,
      xlab="Log10-scaled number of PPIs per plasmid-related protein") + grid()
 dev.off()
 
-pdf("Fig_4_Plasmid_Gene_Interaction_Rate_Distribution.pdf", width=11, height=5)
-par(mfrow=c(1,3))
-hist( (table2$plasmidPPIs/table2$plasmidPPIs_genes), breaks=888, col="green", 
-      main="", cex.lab=1.3, ylab="Number of plasmid-related proteins", xlim=c(0,250), density =42,
+pdf("Figure_4_Plasmid_Gene_Interaction_Rate_Distribution.pdf", width=11, height=5)
+par(mfrow=c(1,3))  
+hist( ((fullPMNLE$Plasmid_PPI)/fullPMNLE$Plasmid_genes), breaks=121, col="green", 
+      main="", cex.lab=1.3, ylab="Number of plasmid-related proteins", xlim=c(0,120), density =42,
      xlab="Average number of PPIs per plasmid-related protein") + grid()
-hist( (table2$chromPPIs/table2$chromPPIs_genes), breaks=91, col="purple", main="",  
-     ylab="Number of chromosomal proteins", xlim=c(0,250),  density =42, cex.lab=1.3,
+hist( (fullPMNLE$Chrom_PPI/fullPMNLE$Chrom_genes), breaks=41, col="purple", main="",  
+     ylab="Number of chromosomal proteins", xlim=c(0,120),  density =42, cex.lab=1.3,
      xlab="Average number of PPIs per chromosomal protein") + grid()
-hist.data = hist( log10(chromPPIs_Array), plot=F, breaks=31)
+hist.data = hist(  (fullPMNLE$Chrom_PPI/fullPMNLE$Chrom_genes), plot=F, breaks=27)
 hist.data$counts = as.numeric(log10(hist.data$counts )) 
  hist.data$counts[is.na(hist.data$counts)] <- 0
   hist.data$counts[is.infinite(hist.data$counts)] <- 0
-plot( hist.data,   col="purple", main="",  
-     ylab="Log10-scaled number of proteins", density =32, cex.lab=1.3,
-     xlab="Log10-scaled number of PPIs per protein")  
-hist.data = hist( log10(plasmidPPIs_Array), plot=F, breaks=31)
+plot( hist.data,   col="purple", main="",  xlim=c(0,115), # xaxt="n", yaxt="n",
+     ylab="Log10-scaled number of proteins", density =42, cex.lab=1.3,
+     xlab="Average number of PPIs per protein per sample")  
+hist.data = hist(  (fullPMNLE$Plasmid_PPI/fullPMNLE$Plasmid_genes), plot=F, breaks=111)
 hist.data$counts = as.numeric(log10(hist.data$counts )) 
  hist.data$counts[is.na(hist.data$counts)] <- 0
   hist.data$counts[is.infinite(hist.data$counts)] <- 0
-plot( hist.data,   col="green", add=T, cex.lab=1.3, density =51) + grid()
+plot( hist.data,   col="green", add=T, cex.lab=1.3, density =34) + grid()
 legend("topright", legend=c("Chromosomal proteins", "Plasmid-related proteins"),
        col=c("purple", "green"), fill=c("purple", "green"), cex=1.1, box.lty=0)
 dev.off()
-write.csv(table2, "Plasmid_PPI_rates.csv")
 
-plasmidPPIs # 1,047,420
-chromPPIs   # 600,858,987
-plasmidPPIs_genes #  13,359
-chromPPIs_genes   # 15,622,015
-plasmidPPIs/plasmidPPIs_genes # 78.4
-chromPPIs/chromPPIs_genes  # 38.5
-summary(plasmidPPIs_Array) # median = 32 , sd=506.6
-sd(plasmidPPIs_Array)  # PPIs per protein
-hist(log10(plasmidPPIs_Array), breaks=111) + grid()
-summary(chromPPIs_Array) # median = 15 , sd=284.5
-sd(chromPPIs_Array)
 
-# need output8/
+# write.csv(table2, "Plasmid_PPI_rates.csv")
 
+sum(fullPMNLE$Plasmid_PPI) #   390,592
+sum(fullPMNLE$Chrom_PPI)   # 286,364,425
+sum(fullPMNLE$Plasmid_genes) #  13,348
+sum(fullPMNLE$Chrom_genes)    # 15,450,151
+
+fullPMNLE4 <- subset(fullPMNLE, Plasmid_genes>0)
+summary(fullPMNLE4$Plasmid_genes)
+sd(fullPMNLE4$Plasmid_genes) # median=5, mean=27.2+-112.3
+# 1.00    2.00    5.00   27.19   14.00 1286.00 
+summary(fullPMNLE4$Chrom_genes) # mean = 3927+-
+sd(fullPMNLE4$Chrom_genes) # median=3923, mean = 3927+-1367
+#   357    2900    3923    3927    4830    8564 
+100*summary(fullPMNLE4$Plasmid_genes/(fullPMNLE4$Chrom_genes+fullPMNLE4$Plasmid_genes))
+100*sd(fullPMNLE4$Plasmid_genes/(fullPMNLE4$Chrom_genes+fullPMNLE4$Plasmid_genes))
+# median=0.16, mean=0.65+-2.50 percentages
+# 0.01516  0.05929  0.15530  0.64503  0.37528 31.17576 
+
+summary(fullPMNLE4$Plasmid_PPI/fullPMNLE4$Plasmid_genes) # 29.5+-  
+sd( (fullPMNLE4$Plasmid_PPI/fullPMNLE4$Plasmid_genes)) #  35.04
+#  0.00   18.89   29.50   38.99   48.84  452.00      
+summary(fullPMNLE$Chrom_PPI/fullPMNLE$Chrom_genes) #
+sd(fullPMNLE$Chrom_PPI/fullPMNLE$Chrom_genes)   # 17.6+-5.7
+# 1.00   14.03   16.40   17.64   19.74   78.28 
+summary(fullPMNLE4$Chrom_PPI/fullPMNLE4$Chrom_genes) #
+sd(fullPMNLE4$Chrom_PPI/fullPMNLE4$Chrom_genes)   # 14.8+-3.7
+
+mean(fullPMNLE4$Plasmid_PPI/fullPMNLE4$Plasmid_genes)/ mean(fullPMNLE$Chrom_PPI/fullPMNLE$Chrom_genes) # ratio = 2.2105
+
+t.test((fullPMNLE4$Plasmid_PPI/fullPMNLE4$Plasmid_genes),
+       (fullPMNLE$Chrom_PPI/fullPMNLE$Chrom_genes))
+plot( (fullPMNLE4$Chrom_PPI/fullPMNLE4$Chrom_genes), (fullPMNLE4$Plasmid_PPI/fullPMNLE4$Plasmid_genes), xlim=c(0,230), ylim=c(0,220)) + grid()
+fullPMNLE4$rate <- fullPMNLE4$Plasmid_PPI/fullPMNLE4$Plasmid_genes
+subset(fullPMNLE4, rate>220)
+hist(  log2(fullPMNLE4$Chrom_PPI/fullPMNLE4$Chrom_genes)/(fullPMNLE4$Plasmid_PPI/fullPMNLE4$Plasmid_genes), breaks=44, xlim=c(-1,2.5)) + grid()
+
+sum(fullPMNLE4$Plasmid_PPI)
+sum(fullPMNLE4$Chrom_PPI)
 # re-try
 setwd("~/Desktop/OUTPUT8/") # _genes_data.csv
 
