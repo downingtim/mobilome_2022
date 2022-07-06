@@ -1644,14 +1644,48 @@ text(14,31.8, "plasmid-encoded proteins are excluded",
      col=alpha("black",0.7), cex=1.1)
 dev.off()
 
-summary(fullPMNLE4$loops_all )
+sum(fullPMNLE4$Plasmid_Plasmid_PPI)/sum(fullPMNLE4$Plasmid_PPI+fullPMNLE4$Plasmid_Plasmid_PPI)
+
+summary(fullPMNLE4$indirect_all )   # mean=0.9+-0.6
+sd(na.omit(fullPMNLE4$indirect_all )  )
+
+summary(fullPMNLE4$indirect_chrom )   # mean=3.7+-2.1
+sd(na.omit(fullPMNLE4$indirect_chrom)  )
+
+t.test(fullPMNLE4$indirect_chrom, fullPMNLE4$indirect_all )
+
+summary(fullPMNLE4$loops_all/(fullPMNLE4$Chrom_genes+fullPMNLE4$Plasmid_genes)) # 0.8+-0.3
+sd(na.omit(fullPMNLE4$loops_all/(fullPMNLE4$Chrom_genes+fullPMNLE4$Plasmid_genes)))
+
+summary(fullPMNLE4$loops/(fullPMNLE4$Chrom_genes)) # 3.7+-2.1
+sd(na.omit(fullPMNLE4$loops/(fullPMNLE4$Chrom_genes)))
+
+summary(fullPMNLE$indirect_chrom )   # mean=5.5+-3.1
+sd(na.omit(fullPMNLE$indirect_chrom)  )
+
+t.test(fullPMNLE4$indirect_chrom, fullPMNLE$indirect_chrom )
+
+summary(fullPMNLE4$loops/(fullPMNLE4$loops_all)) # 4.95+-3.02 (median=4.37)
+sd(na.omit(fullPMNLE4$loops/(fullPMNLE4$loops_all))) # 
+hist(fullPMNLE4$loops/(fullPMNLE4$loops_all), breaks=111) # 4.95+-3.02 (median=4.37)
+length(subset(fullPMNLE4, loops < loops_all)$loops) # 8
+length(subset(fullPMNLE4, loops > loops_all)$loops)  # 16 equal, 439
+
+summary(fullPMNLE$loops/(fullPMNLE$Chrom_genes)) # 5.5+-3.1
+sd(na.omit(fullPMNLE$loops/(fullPMNLE$Chrom_genes)))
+
+summary(fullPMNLE4$loops_all )  #  3136+-1452
 #   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
- #     0    2081    2888    3101    3853   14062 
-sd(fullPMNLE4$loops_all ) # 14682.255
-summary(fullPMNLE4$loops )
+ #   725    2090    2917    3136    3870   14062       4 
+sd(na.omit(fullPMNLE4$loops_all ) ) # 1452
+summary(fullPMNLE4$loops ) # 15668+-12178
 #   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
- #    14    7408   12667   15446   20506   65171      27 
-sd(na.omit(fullPMNLE4$loops) ) # 11217.89
+ #  14    7413   12718   15668   20554  118041      28 
+sd(na.omit(fullPMNLE4$loops) ) # 12178
+summary(fullPMNLE$loops ) # 21482+-18510
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ #   0    8074   16518   21482   29073  146082     149 
+sd(na.omit(fullPMNLE$loops) ) # 18510
 t.test(fullPMNLE4$loops,fullPMNLE4$loops_all )
 
 summary(fullPMNLE4$ccs_all )
@@ -2575,6 +2609,14 @@ hist(  log2(fullPMNLE4$Chrom_PPI/fullPMNLE4$Chrom_genes)/(fullPMNLE4$Plasmid_PPI
 
 sum(fullPMNLE4$Plasmid_PPI)
 sum(fullPMNLE4$Chrom_PPI)
+
+ # indirect connections
+summary(fullPMNLE$indirect_all*(fullPMNLE$Plasmid_genes + fullPMNLE$Chrom_genes))
+#  Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+ #    0    5957   14808   20047   27775  146082     125 
+summary(fullPMNLE$indirect_chrom*fullPMNLE$Chrom_genes) # indirect connections
+#    0    8061   16518   21474   29073  146082     149 
+
 # re-try
 setwd("~/Desktop/OUTPUT8/") # _genes_data.csv
 
