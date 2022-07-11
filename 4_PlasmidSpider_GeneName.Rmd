@@ -70,6 +70,8 @@ library(ggpubr)
 #install.packages("hash")
 library(hash)
 library(factoextra)
+library(lsa)
+library(gplots)
 
 set_entrez_key("eaf09dca7612332fa2595c903c24d1afef08")
 Sys.getenv("ENTREZ_KEY")
@@ -191,7 +193,30 @@ setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/RMD_FILES")
 new <- data.frame(read.csv("plasmidGenes.new.csv"))   
 rownames(new) <- new[,1]
 new <- new[-c(1)] # drop unneeded column
-dim(new) # 494 obs. of  3023 variables:
+dim(new)[1] # 494 obs. of  3023 variables:
+
+mtrx <- matrix(unlist(new), ncol =3023, nrow = 494)
+str(mtrx) # cosine similarity
+out1 <- cosine(mtrx)
+str(out1)
+rownames(out1) <- colnames(new)
+colnames(out1) <- colnames(new)
+pdf("Figure_cosine_genes.pdf", width=86, height=86, bg="white")
+heatmap.2(as.matrix(out1), dendrogram="both", trace="none",  
+          margin=c(6,6), cex.lab=0.1, cex.axis=0.1, col=redblue(100))
+dev.off()
+
+mtrx2 <- matrix(unlist(new), ncol =3023, nrow = 494)
+mtrx2 <- t(mtrx2) # transpose!
+str(mtrx2) # cosine similarity
+out2 <- cosine(mtrx)
+str(out2)
+rownames(out2) <- rownames(new) # 
+colnames(out2) <- rownames(new) # 494
+pdf("Figure_cosine_genes.pdf", width=46, height=46, bg="white")
+heatmap.2(as.matrix(out2), dendrogram="both", trace="none",  
+          margin=c(6,6), cex.lab=0.1, cex.axis=0.1, col=redblue(100))
+dev.off()
 
 hist(log10 (rowSums(new)), breaks=99) + grid()
 hist(log10 (colSums(new)), breaks=99) + grid()
@@ -663,6 +688,24 @@ ggarrange(fig4_2, ncol=1, nrow=1)
 dev.off()
 
 ########################################################################
+########################################################################
+
+rrr = cor.test(log10(fullPMNLE$inputProteins), y=log10(fullPMNLE$interactions))$estimate
+rrr # r =0.914
+pdf("Figure_2_revised.pdf", width=6, height=6)
+ggplot(fullPMNLE, aes(x= log10(fullPMNLE$inputProteins), y=log10(fullPMNLE$interactions))) +
+  geom_point(color ="blue", size=0.2, shape=1, (aes(alpha=0.2)), show.legend=F) +
+  scale_x_continuous(name="Log10 of number of proteins per sample", limits =c(2.8,4.1)) +
+  scale_y_continuous(name="Log10 of number of PPIs per sample", limits =c(4,5.4))  + 
+  geom_smooth(method='lm', col="red") + 
+  annotation_custom(grobTree(textGrob(paste("For ",length(fullPMNLE$STRING.bacteria.name),
+    " bacterial samples",sep=""),x=0.64,y=.1,hjust=0, gp=gpar(col="black",fontsize=9)))) +
+  annotation_custom(grobTree(textGrob(paste("All proteins adj_r=", round(rrr,3),sep=""),
+  x=0.65, y=.075, hjust=0, gp=gpar(col="black", fontsize=9)))) +
+  annotation_custom(grobTree(textGrob(paste("All proteins adj_r2=", round(rrr**2,3),sep=""),
+  x=0.65, y=.05, hjust=0, gp=gpar(col="black", fontsize=9))))  
+dev.off()
+
 #################################################################
 # Full aPMNLE
 
@@ -1364,31 +1407,31 @@ dev.off()
 ########### Numbers of connections vs proteins & other metadata -> Fig_S22 ##
 ########################################################################
 
-fullPMNLE$proteins_ccs_all = log10(fullPMNLE$inputProteins/fullPMNLE$ccs_all)
-fullPMNLE$proteins_ccs_chrom = log10(fullPMNLE$Chrom_genes/fullPMNLE$ccs)
-fullPMNLE[mapply(is.infinite, fullPMNLE)] <- NA
+fullPMNLE4$proteins_ccs_all = log10(fullPMNLE4$inputProteins/fullPMNLE4$ccs_all)
+fullPMNLE4$proteins_ccs_chrom = log10(fullPMNLE4$Chrom_genes/fullPMNLE4$ccs)
+fullPMNLE4[mapply(is.infinite, fullPMNLE4)] <- NA
 
-r1 <- sqrt(summary(lm((fullPMNLE$proteins_ccs_chrom) ~ log10(fullPMNLE$interactions)))$adj.r.squared)
-r2 <- sqrt(summary(lm((fullPMNLE$proteins_ccs_all) ~ log10(fullPMNLE$interactions)))$adj.r.squared)
+r1 <- cor.test(fullPMNLE4$proteins_ccs_chrom, log10(fullPMNLE4$interactions))$estimate
+r2 <- cor.test(fullPMNLE4$proteins_ccs_all, log10(fullPMNLE4$interactions))$estimate
 
-figure5_a_1 <- ggplot(fullPMNLE, aes(x=log10(fullPMNLE$interactions),
-                                          y=fullPMNLE$proteins_ccs_all)) +
+figure5_a_1 <- ggplot(fullPMNLE4, aes(x=log10(fullPMNLE4$interactions),
+                                          y=fullPMNLE4$proteins_ccs_all)) +
   geom_point(color ="black", size=0.1, shape=1, (aes(alpha=0.1)), show.legend=F) +
-  scale_x_continuous(name="Log10 of number of PPIs per sample", limits =c(4,5.5) ) +
-  scale_y_continuous(name="Proteins per connected component", limits =c(1,3))  + 
+  scale_x_continuous(name="Log10 of number of PPIs per sample", limits =c(4.5,5.4) ) +
+  scale_y_continuous(name="Proteins per connected component", limits =c(1,2.5))  + 
   geom_smooth(method='lm', col="black") + 
-  annotation_custom(grobTree(textGrob(paste("For ",length(fullPMNLE$STRING.bacteria.name),
+  annotation_custom(grobTree(textGrob(paste("For ",length(fullPMNLE4$STRING.bacteria.name),
     " bacterial samples",sep=""),x=0.01,y=.89,hjust=0, gp=gpar(col="black",fontsize=7)))) +
   annotation_custom(grobTree(textGrob(paste("All proteins adj_r=", round(r2,3),sep=""),
   x=0.01,y=.87, hjust=0, gp=gpar(col="black", fontsize=7)))) +
   annotation_custom(grobTree(textGrob(paste("All proteins adj_r2=", round(r2**2,3),sep=""),
   x=0.01,y=.85, hjust=0, gp=gpar(col="black", fontsize=7))))  
   
-figure5_a_2 <- figure5_a_1 + geom_point(data=fullPMNLE,
-        aes(x=log10(fullPMNLE$interactions), y=fullPMNLE$proteins_ccs_chrom, alpha=0.1),
+figure5_a_2 <- figure5_a_1 + geom_point(data=fullPMNLE4,
+        aes(x=log10(fullPMNLE4$interactions), y=fullPMNLE4$proteins_ccs_chrom, alpha=0.1),
              color ="red", size=0.1, shape=2, show.legend=F) + 
-  geom_smooth(data=fullPMNLE,
-        aes(x=log10(fullPMNLE$interactions), y=fullPMNLE$proteins_ccs_chrom),
+  geom_smooth(data=fullPMNLE4,
+        aes(x=log10(fullPMNLE4$interactions), y=fullPMNLE4$proteins_ccs_chrom),
         method='lm', col="red") +
   annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r=", round(r1,3),sep=""),
   x=0.01,y=.83, hjust=0, gp=gpar(col="red", fontsize=7)))) +
@@ -1396,27 +1439,27 @@ figure5_a_2 <- figure5_a_1 + geom_point(data=fullPMNLE,
   x=0.01,y=.81, hjust=0, gp=gpar(col="red", fontsize=7)))) 
 
 ### Proteins
-r1p <- sqrt(summary(lm((fullPMNLE$proteins_ccs_chrom) ~ log10(fullPMNLE$inputProteins)))$adj.r.squared)
-r2p <- sqrt(summary(lm((fullPMNLE$proteins_ccs_all) ~ log10(fullPMNLE$inputProteins)))$adj.r.squared)
+r1p <- cor.test(fullPMNLE4$proteins_ccs_chrom, log10(fullPMNLE4$inputProteins))$estimate
+r2p <- cor.test(fullPMNLE4$proteins_ccs_all, log10(fullPMNLE4$inputProteins))$estimate
 
-figure5_b_1 <- ggplot(fullPMNLE, aes(x=log10(fullPMNLE$inputProteins),
-                                          y=fullPMNLE$proteins_ccs_all)) +
+figure5_b_1 <- ggplot(fullPMNLE4, aes(x=log10(fullPMNLE4$inputProteins),
+                                          y=fullPMNLE4$proteins_ccs_all)) +
   geom_point(color ="black", size=0.1, shape=1, (aes(alpha=0.1)), show.legend=F) +
-  scale_x_continuous(name="Log10 of number of proteins per sample", limits =c(2.8,4)) +
-  scale_y_continuous(name="Proteins per connected component", limits =c(1,3))  + 
+  scale_x_continuous(name="Log10 of number of proteins per sample", limits =c(3.1,3.9)) +
+  scale_y_continuous(name="Proteins per connected component", limits =c(1,2.5))  + 
   geom_smooth(method='lm', col="black") + 
-  annotation_custom(grobTree(textGrob(paste("For ",length(fullPMNLE$STRING.bacteria.name),
+  annotation_custom(grobTree(textGrob(paste("For ",length(fullPMNLE4$STRING.bacteria.name),
     " bacterial samples",sep=""),x=0.01,y=.89,hjust=0, gp=gpar(col="black",fontsize=7)))) +
   annotation_custom(grobTree(textGrob(paste("All proteins adj_r=", round(0.00,3),sep=""),
   x=0.01,y=.87, hjust=0, gp=gpar(col="black", fontsize=7)))) +
   annotation_custom(grobTree(textGrob(paste("All proteins adj_r2=", round(0.00,3),sep=""),
   x=0.01,y=.85, hjust=0, gp=gpar(col="black", fontsize=7))))  
   
-figure5_b_2 <- figure5_b_1 + geom_point(data=fullPMNLE,
-    aes(x=log10(fullPMNLE$inputProteins), y=fullPMNLE$proteins_ccs_chrom, alpha=0.1),
+figure5_b_2 <- figure5_b_1 + geom_point(data=fullPMNLE4,
+    aes(x=log10(fullPMNLE4$inputProteins), y=fullPMNLE4$proteins_ccs_chrom, alpha=0.1),
              color ="red", size=0.1, shape=2, show.legend=F) + 
-  geom_smooth(data=fullPMNLE,
-        aes(x=log10(fullPMNLE$inputProteins), y=fullPMNLE$proteins_ccs_chrom),
+  geom_smooth(data=fullPMNLE4,
+        aes(x=log10(fullPMNLE4$inputProteins), y=fullPMNLE4$proteins_ccs_chrom),
         method='lm', col="red") +
   annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r=", round(r1p,3),sep=""),
   x=0.01,y=.83, hjust=0, gp=gpar(col="red", fontsize=7)))) +
@@ -1424,27 +1467,28 @@ figure5_b_2 <- figure5_b_1 + geom_point(data=fullPMNLE,
   x=0.01,y=.81, hjust=0, gp=gpar(col="red", fontsize=7)))) 
 
 ### Chrom_PPI
-r1c <- sqrt(summary(lm((fullPMNLE$proteins_ccs_chrom) ~ log10(fullPMNLE$Chrom_PPI)))$adj.r.squared)
-r2c <- sqrt(summary(lm((fullPMNLE$proteins_ccs_all) ~ log10(fullPMNLE$Chrom_PPI)))$adj.r.squared)
 
-figure5_c_1 <- ggplot(fullPMNLE, aes(x=log10(fullPMNLE$Chrom_PPI),
-                                          y=fullPMNLE$proteins_ccs_all)) +
+r1c <- cor.test(fullPMNLE4$proteins_ccs_chrom, log10(fullPMNLE4$Chrom_PPI))$estimate
+r2c <- cor.test(fullPMNLE4$proteins_ccs_all, log10(fullPMNLE4$Chrom_PPI))$estimate
+
+figure5_c_1 <- ggplot(fullPMNLE4, aes(x=log10(fullPMNLE4$Chrom_PPI),
+                                          y=fullPMNLE4$proteins_ccs_all)) +
   geom_point(color ="black", size=0.1, shape=1, (aes(alpha=0.1)), show.legend=F) +
-  scale_x_continuous(name="Log10 of number of chromosomal PPIs per sample", limits =c(4,5.5)) +
-  scale_y_continuous(name="Proteins per connected component", limits =c(1,3))  + 
+  scale_x_continuous(name="Log10 of number of chromosomal PPIs per sample", limits =c(4.5,5.4)) +
+  scale_y_continuous(name="Proteins per connected component", limits =c(1,2.5))  + 
   geom_smooth(method='lm', col="black") + 
-  annotation_custom(grobTree(textGrob(paste("For ",length(fullPMNLE$STRING.bacteria.name),
+  annotation_custom(grobTree(textGrob(paste("For ",length(fullPMNLE4$STRING.bacteria.name),
     " bacterial samples",sep=""),x=0.01,y=.89,hjust=0, gp=gpar(col="black",fontsize=7)))) +
   annotation_custom(grobTree(textGrob(paste("All proteins adj_r=", round(r2c,3),sep=""),
   x=0.02, y=.87, hjust=0, gp=gpar(col="black", fontsize=7)))) +
   annotation_custom(grobTree(textGrob(paste("All proteins adj_r2=", round(r2c**2,3),sep=""),
   x=0.02, y=.85, hjust=0, gp=gpar(col="black", fontsize=7))))  
   
-figure5_c_2 <- figure5_c_1 + geom_point(data=fullPMNLE,
-        aes(x=log10(fullPMNLE$Chrom_PPI), y=fullPMNLE$proteins_ccs_chrom, alpha=0.1),
+figure5_c_2 <- figure5_c_1 + geom_point(data=fullPMNLE4,
+        aes(x=log10(fullPMNLE4$Chrom_PPI), y=fullPMNLE4$proteins_ccs_chrom, alpha=0.1),
              color ="red", size=0.1, shape=2, show.legend=F) + 
-  geom_smooth(data=fullPMNLE,
-        aes(x=log10(fullPMNLE$Chrom_PPI), y=fullPMNLE$proteins_ccs_chrom),
+  geom_smooth(data=fullPMNLE4,
+        aes(x=log10(fullPMNLE4$Chrom_PPI), y=fullPMNLE4$proteins_ccs_chrom),
         method='lm', col="red") +
   annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r=", round(r1c,3),sep=""),
   x=0.02, y=.83, hjust=0, gp=gpar(col="red", fontsize=7)))) +
@@ -1452,27 +1496,27 @@ figure5_c_2 <- figure5_c_1 + geom_point(data=fullPMNLE,
   x=0.02, y=.81, hjust=0, gp=gpar(col="red", fontsize=7)))) 
 
 ### Plasmid_PPI
-r1d <- sqrt(summary(lm((fullPMNLE$proteins_ccs_chrom) ~ log10(fullPMNLE$Plasmid_PPI)))$adj.r.squared)
-r2d <- sqrt(summary(lm((fullPMNLE$proteins_ccs_all) ~ log10(fullPMNLE$Plasmid_PPI)))$adj.r.squared)
+r1d <- cor.test(fullPMNLE4$proteins_ccs_chrom, log10(fullPMNLE4$Plasmid_PPI))$estimate
+r2d <- cor.test(fullPMNLE4$proteins_ccs_all, log10(fullPMNLE4$Plasmid_PPI))$estimate
 
-figure5_d_1 <- ggplot(fullPMNLE, aes(x=log10(fullPMNLE$Plasmid_PPI),
-                                          y=fullPMNLE$proteins_ccs_all)) +
+figure5_d_1 <- ggplot(fullPMNLE4, aes(x=log10(fullPMNLE4$Plasmid_PPI),
+                                          y=fullPMNLE4$proteins_ccs_all)) +
   geom_point(color ="black", size=0.1, shape=1, (aes(alpha=0.1)), show.legend=F) +
-  scale_x_continuous(name="Log10 of number of plasmid PPIs per sample", limits =c(1.1,4.5)) +
-  scale_y_continuous(name="Proteins per connected component", limits =c(1,3))  + 
+  scale_x_continuous(name="Log10 of number of plasmid PPIs per sample", limits =c(1,2.5)) +
+  scale_y_continuous(name="Proteins per connected component", limits =c(1,2.5))  + 
   geom_smooth(method='lm', col="black") + 
-  annotation_custom(grobTree(textGrob(paste("For ",length(fullPMNLE$STRING.bacteria.name),
+  annotation_custom(grobTree(textGrob(paste("For ",length(fullPMNLE4$STRING.bacteria.name),
     " bacterial samples",sep=""),x=0.01,y=.89,hjust=0, gp=gpar(col="black",fontsize=7)))) +
   annotation_custom(grobTree(textGrob(paste("All proteins adj_r=", round(r2d,3),sep=""),
   x=0.02, y=.87, hjust=0, gp=gpar(col="black", fontsize=7)))) +
   annotation_custom(grobTree(textGrob(paste("All proteins adj_r2=", round(r2d**2,3),sep=""),
   x=0.02, y=.85, hjust=0, gp=gpar(col="black", fontsize=7))))  
   
-figure5_d_2 <- figure5_d_1 + geom_point(data=fullPMNLE,
-        aes(x=log10(fullPMNLE$Plasmid_PPI), y=fullPMNLE$proteins_ccs_chrom, alpha=0.1),
+figure5_d_2 <- figure5_d_1 + geom_point(data=fullPMNLE4,
+        aes(x=log10(fullPMNLE4$Plasmid_PPI), y=fullPMNLE4$proteins_ccs_chrom, alpha=0.1),
              color ="red", size=0.1, shape=2, show.legend=F) + 
-  geom_smooth(data=fullPMNLE,
-        aes(x=log10(fullPMNLE$Plasmid_PPI), y=fullPMNLE$proteins_ccs_chrom),
+  geom_smooth(data=fullPMNLE4,
+        aes(x=log10(fullPMNLE4$Plasmid_PPI), y=fullPMNLE4$proteins_ccs_chrom),
         method='lm', col="red") +
   annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r=", round(r1d,3),sep=""),
   x=0.02, y=.83, hjust=0, gp=gpar(col="red", fontsize=7)))) +
@@ -1489,7 +1533,7 @@ figure5_c1 <- ggExtra::ggMarginal(figure5_c_2, type="densigram",
 figure5_d1 <- ggExtra::ggMarginal(figure5_d_2, type="densigram",
                     size=5,colour="grey", bins=50)  
 par(mfrow=c(2,2))
-pdf("Fig_S20_2.pdf", width=10, height=12, bg="white")
+pdf("Fig_S23_proteinsPerCC.pdf", width=10, height=12, bg="white")
 ggarrange(figure5_a1, figure5_b1, figure5_c1, figure5_d1, ncol=2, nrow=2)
 dev.off()
 #png("Fig_5_PMNLE.png", width=2500, height=2600, units="px")
@@ -1538,7 +1582,9 @@ sd(na.omit(Plasmid_PPI_dat3$diffPMNLE)) # SD = 0.077
 # -0.114881 -0.002151  0.024038  0.041272  0.067758  0.762518        30 
 
 dim(Plasmid_PPI_dat3)  # 489
-t3 <- subset(Plasmid_PPI_dat3, diffPMNLE >  2*sd(na.omit(Plasmid_PPI_dat3$diffPMNLE) ))
+t2 <- subset(Plasmid_PPI_dat3, diffPMNLE >  2*sd(na.omit(Plasmid_PPI_dat3$diffPMNLE)))
+dim(t2)
+t3 <- subset(t2, aPMNLE_all > 0)
 # Top 5% of difference in aPMNLE where plasmid has big effect -> lower connectivity
 dim(t3) # 18 samples
 View(t3[,c(1:8,12,16)] %>%  mutate_if(is.numeric, round, digits=3))
@@ -1574,6 +1620,10 @@ output1[3,] <- colMeans(main_set2[2:16])
 output1[4,] <- colMeans(t3[2:16])
 rownames(output1) <- c("t_stat", "adj_p", "main", "new")
 View(t(output1))
+mean(main_set2$Chrom_genes + main_set2$Plasmid_genes) # 4013.2
+mean(t3$Chrom_genes + t3$Plasmid_genes) # 2,314 
+sd(main_set2$Chrom_genes + main_set2$Plasmid_genes) # 1336
+sd(t3$Chrom_genes + t3$Plasmid_genes) # 1429
 
 # compare connectec components as all +ve vs chrom -ve scaled by all
 all_ccs <- subset(main_set2, ccs_all>0 & ccs>0) # 71.3% more
