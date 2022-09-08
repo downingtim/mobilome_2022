@@ -692,12 +692,14 @@ dev.off()
 
 rrr = cor.test(log10(fullPMNLE$inputProteins), y=log10(fullPMNLE$interactions))$estimate
 rrr # r =0.914
-pdf("Figure_2_revised.pdf", width=6, height=6)
+pdf("Figure_2_revised2.pdf", width=6, height=6)
 ggplot(fullPMNLE, aes(x= log10(fullPMNLE$inputProteins), y=log10(fullPMNLE$interactions))) +
   geom_point(color ="blue", size=0.2, shape=1, (aes(alpha=0.2)), show.legend=F) +
-  scale_x_continuous(name="Log10 of number of proteins per sample", limits =c(2.8,4.1)) +
-  scale_y_continuous(name="Log10 of number of PPIs per sample", limits =c(4,5.4))  + 
   geom_smooth(method='lm', col="red") + 
+    scale_x_continuous(name="Number of proteins per sample", limits =c(2.8,4) ,
+                     labels=c("562","1000","1778","3162","5623","10000")) +
+  scale_y_continuous(name="Number of PPIs per sample", limits =c(4,5.3),
+                     labels=c("10000","31623","100000","316228"))  + 
   annotation_custom(grobTree(textGrob(paste("For ",length(fullPMNLE$STRING.bacteria.name),
     " bacterial samples",sep=""),x=0.64,y=.1,hjust=0, gp=gpar(col="black",fontsize=9)))) +
   annotation_custom(grobTree(textGrob(paste("All proteins adj_r=", round(rrr,3),sep=""),
@@ -1162,9 +1164,9 @@ x5_a_1 <- ggplot(fullPMNLE4, aes(x=log10(fullPMNLE4$interactions),
   annotation_custom(grobTree(textGrob(paste("For ",length(fullPMNLE4$STRING.bacteria.name),
     " samples",sep=""),x=0.01,y=.89,hjust=0, gp=gpar(col="blue",fontsize=10)))) +
   annotation_custom(grobTree(textGrob(paste("All proteins adj_r=", round(r61,3),sep=""),
-  x=0.01,y=.87, hjust=0, gp=gpar(col="blue", fontsize=10)))) +
+  x=0.01,y=.86, hjust=0, gp=gpar(col="blue", fontsize=10)))) +
   annotation_custom(grobTree(textGrob(paste("All proteins adj_r2=", round(r61**2,3),sep=""),
-  x=0.01,y=.85, hjust=0, gp=gpar(col="blue", fontsize=10))))  
+  x=0.01,y=.83, hjust=0, gp=gpar(col="blue", fontsize=10))))  
   
 x5_a_2 <- x5_a_1 + geom_point(data=fullPMNLE4,
         aes(x=log10(fullPMNLE4$interactions), y=fullPMNLE4$indirect_chrom, alpha=0.1),
@@ -1173,9 +1175,9 @@ x5_a_2 <- x5_a_1 + geom_point(data=fullPMNLE4,
         aes(x=log10(fullPMNLE4$interactions), y=fullPMNLE4$indirect_chrom),
         method='lm', col="red") +
   annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r=", round(r51,3),sep=""),
-  x=0.01,y=.82, hjust=0, gp=gpar(col="red", fontsize=10)))) +
+  x=0.01,y=.79, hjust=0, gp=gpar(col="red", fontsize=10)))) +
   annotation_custom(grobTree(textGrob(paste("Chrom proteins adj_r2=", round(r51**2,3),sep=""),
-  x=0.01,y=.79, hjust=0, gp=gpar(col="red", fontsize=10)))) 
+  x=0.01,y=.76, hjust=0, gp=gpar(col="red", fontsize=10)))) 
 
 x5_b_1 <- ggplot(fullPMNLE5, aes(x=log10(fullPMNLE5$interactions),
                                           y=fullPMNLE5$indirect_all)) +
@@ -3036,6 +3038,62 @@ gene_list_all <- gene_list_all[-c(1:78),] # remove incorrect rows
 str(gene_list_all) # 9,551,828 genes
 # write.csv(gene_list_all, "../gene_list_all.csv")
 gene_list_all <- read.csv("../gene_list_all.csv")
+
+########################################################################
+# Check replication proteins
+
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/OUTPUT7/")
+#nn <- data.frame(read.csv("Escherichia_coli_O157_H7_str._EDL933__genes_data.csv"))
+#nn <- nn[,-c(1)]
+#str(nn)
+# X,"Gene","Plasmid","Interactions"
+# "1","aaea",1,4
+# "2","aaeb",1,19
+
+replist <- c("dnaa", "dnab", "dnac", "dnad", "dnae", "dnai", "dnag", "grya",
+             "gyrb", "liga", "oric", "prii", "pare", "parc", "pola", "polb",
+             "polc", "pold", "ssb") # 19 genes
+
+gene_list_rep <- 0
+gene_list_not <- 0
+
+files1 <- list.files(pattern = "\\.csv$")
+str(files1)
+for (k in 3528:length(files1)){
+     name <- files1[k]  # 4429 samples
+     print(k)
+     try ( in2 <- data.frame(read.csv(name)) )
+     in2 <- in2[,-c(1)]
+     name = gsub("\\.(?=[^.]*\\.)", "", name, perl=T)
+     name = gsub("\\:", "", name, perl=T)
+     name = gsub("_genes_data.csv", "", name, perl=T)
+     
+     gene_list_rep <- rbind(gene_list_rep, in2[(in2$Gene %in% replist),])
+     gene_list_not <- rbind(gene_list_not, in2[!(in2$Gene %in% replist),])
+} # end for
+
+dim(gene_list_rep)
+dim(gene_list_not)
+1 - dim(gene_list_rep)[1]/(dim(gene_list_rep)[1] + dim(gene_list_not)[1])
+gene_list_rep1 <- subset(gene_list_rep, Plasmid==1)$Interactions # plasmid-chr PPIs
+sd(gene_list_rep1) # 50.3
+summary(gene_list_rep1) #  mean=97.8, median=93
+gene_list_rep0 <- subset(gene_list_rep, Plasmid==0)$Interactions # chr-chr PPIs
+sd(gene_list_rep0) # 104.0
+summary(gene_list_rep0) # mean=104.1, median=81
+View(gene_list_rep)
+hist(gene_list_rep0, col="blue")
+hist(gene_list_rep1, col="red")
+
+length(gene_list_rep$Interactions) # 104
+length(gene_list_not$Interactions) # 38.4
+
+gene_list_rep1n <- subset(gene_list_not, Plasmid==1)$Interactions # plasmid-chr PPIs
+sd(gene_list_rep1n) # 510
+summary(gene_list_rep1n) #  mean=78, median=31
+gene_list_rep0n <- subset(gene_list_not, Plasmid==0)$Interactions # chr-chr PPIs
+sd(gene_list_rep0n) # 284
+summary(gene_list_rep0n) # mean=38, median=15
 
 ########################################################################
 ########### NMF of plasmid-related PPI rates per gene/sample #####################

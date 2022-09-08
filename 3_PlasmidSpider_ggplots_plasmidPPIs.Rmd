@@ -49,7 +49,7 @@ library(ggpubr)
 
 ############## Now real code ##################
 # Sample Plasmid_PPI Chrom_PPI Fraction
-setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/RMD_FILES")
+setwd("/Volumes/GoogleDrive/My Drive/TDA_Summer2021/RMD_FILES/OLDFILES/")
 # use *_chrom_data.csv  from OUTPUT6/
 dat1 <- data.frame(read.csv("Plasmid_PPI.csv", header=T, sep="\t"))
 dat1$Sample <- gsub("OUTPUT5_chroms_all_4422/",  replacement="", dat1$Sample)
